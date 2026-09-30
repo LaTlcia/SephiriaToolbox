@@ -10,14 +10,20 @@ public partial class SephiriaToolbox
 {
     const double LootBaseBudget = 3, LootCharmBudget = 1, LootTabletBudget = 2.5;
 
+    enum LootKind : byte { None, Reward, Shop, Enchant }
+
     sealed class LootOption
     {
+        public string Key;
         public int EntityId, InstanceId, Rarity;
+        public int Price = -1;
         public string Name;
         public bool IsTablet, Merge, Rotatable;
+        public bool FromBase;
         public int MergeInstance, MergeLevels, MergeCats;
         public string Note;
         public ArrModel Model;
+        public bool Built, Queued;
         public volatile bool Done;
         public string Error;
         public Exception Failure;
@@ -26,183 +32,260 @@ public partial class SephiriaToolbox
         public int LevelGain;
         public bool Taken;
         public int Slot = -1, Rotation;
+        public int EnterRot = -1;
         public string Drop;
         public bool Rearrange;
         public int W;
     }
 
+    LootKind lootKind;
+    string lootScene, lootInvSig, lootMessage = "";
     List<LootOption> lootOptions;
+    List<LootOption> lootWaiting;
     ArrModel lootBase;
-    Sephirite lootSephirite;
-    string lootKey, lootMessage = "";
-    int lootBuildNext = -2;
-    int lootGeneration, lootTotal, lootRestarts;
-    int lootProgress;
-    volatile bool lootStale;
+    volatile LootBaseRun lootBaseRun;
+    bool lootBaseBuilt;
+
+    sealed class LootBaseRun
+    {
+        public ArrModel Model;
+        public ArrResult Result;
+    }
+
+    ArrResult LootBaseResultFor(ArrModel m) { var run = lootBaseRun; return run != null && run.Model == m ? run.Result : null; }
     Task lootTask;
+    int lootGeneration, lootRestarts;
+    int lootProgress, lootTotal;
+    volatile bool lootStale;
     Stopwatch lootClock;
     double lootSeconds;
     bool lootOpen, lootHidden;
     float nextLootCheck;
-
-    static Sephirite OpenSephirite()
-    {
-        try
-        {
-            var ui = UIManager.Instance;
-            var panel = ui != null ? ui.GetElement<UI_SephiriteRewardPanel>() : null;
-            var sep = panel != null && panel.IsOpened ? panel.sephirite : null;
-            return sep != null && sep.isGenerated && sep.Rewards.Count > 0 ? sep : null;
-        }
-        catch { return null; }
-    }
+    Sephirite lootSephirite;
 
     void UpdateLoot()
     {
-        if (lootBuildNext > -2) { BuildNextLootModel(); return; }
         if (lootTask != null && lootTask.IsCompleted) FinishLootTask();
-        if (Time.unscaledTime < nextLootCheck) return;
-        nextLootCheck = Time.unscaledTime + 0.25f;
-        var sep = LocalAvatar() != null ? OpenSephirite() : null;
-        if (sep == null)
+        bool built = BuildNextLootModel();
+        if (!built && lootTask == null) StartLootTask();
+        if (Time.unscaledTime >= nextLootCheck)
+        {
+            nextLootCheck = Time.unscaledTime + 0.25f;
+            CheckLootScene();
+        }
+        RefreshLootRows();
+    }
+
+    void CheckLootScene()
+    {
+        var avatar = LocalAvatar();
+        var kind = LootKind.None;
+        string scene = null;
+        List<LootOption> offers = null;
+        if (avatar != null && avatar.Inventory != null)
+        {
+            try
+            {
+                if (TryRewardOffers(avatar, out scene, out offers)) kind = LootKind.Reward;
+                else if (TryShopOffers(avatar, out scene, out offers)) kind = LootKind.Shop;
+                else if (TryEnchantOffers(avatar, out scene, out offers)) kind = LootKind.Enchant;
+            }
+            catch (Exception e) { WarnOnce("掉落评估：读取选项", e); kind = LootKind.None; }
+        }
+        if (kind == LootKind.None)
         {
             if (lootOpen) StopLoot();
             return;
         }
-        if (!lootOpen) { lootHidden = false; lootRestarts = 0; }
+        bool newScene = !lootOpen || kind != lootKind || scene != lootScene;
+        if (newScene) { lootHidden = false; lootRestarts = 0; }
         lootOpen = true;
-        lootSephirite = sep;
-        string key = LootKey(sep);
+        string sig = InventorySignature(avatar);
+        bool restart = newScene || sig != lootInvSig;
         if (lootStale && lootTask == null)
         {
             lootStale = false;
-            if (lootRestarts++ < 2) lootKey = null;
+            if (lootRestarts++ < 2) restart = true;
         }
-        if (key == lootKey) return;
-        if (lootKey != null) lootRestarts = 0;
-        lootKey = key;
-        if (settings.lootAuto) StartLoot(sep);
-        else
+        var current = lootOptions ?? lootWaiting;
+        if (!restart && current != null && SameOffers(current, offers)) return;
+        if (!restart && current == null && lootMessage.Length > 0) return;
+        lootKind = kind;
+        lootScene = scene;
+        if (!settings.lootAuto)
         {
             lootGeneration++;
-            lootBuildNext = -2;
             lootOptions = null;
+            lootWaiting = offers;
             lootMessage = "";
+            lootInvSig = sig;
+            if (restart) { lootBase = null; lootBaseRun = null; lootBaseBuilt = false; }
+            return;
         }
+        if (restart || lootOptions == null) StartLootSession(sig, offers, keepBase: !restart && lootBase != null);
+        else MergeOffers(offers);
     }
 
-    static string LootKey(Sephirite sep) => sep.netId + ":" + string.Join(",", sep.Rewards.Select(r => r.instanceID));
+    static bool SameOffers(List<LootOption> a, List<LootOption> b) =>
+        a.Count == b.Count && a.Zip(b, (x, y) => x.Key == y.Key && x.Price == y.Price && x.Note == y.Note).All(v => v);
+
+    static string InventorySignature(PlayerAvatar avatar)
+    {
+        var inv = avatar.Inventory;
+        var dm = DungeonManager.Instance;
+        var parts = new List<string>();
+        foreach (var v in inv.inventoryMatrix.Values)
+            if (v != null && v.YIdx < 100)
+                parts.Add(v.InstanceID + "/" + v.EntityID + "/" + (dm != null ? dm.GetGlobalItemStatValue(v.InstanceID, "Enchant") : ""));
+        parts.Sort(StringComparer.Ordinal);
+        return inv.CurrentInventoryStorage + "|" + inv.uniquePairCount + "|" + string.Join(",", parts);
+    }
+
+    void StartLootManually()
+    {
+        if (lootWaiting == null) return;
+        StartLootSession(lootInvSig, lootWaiting, keepBase: lootBase != null && lootBaseBuilt);
+        lootWaiting = null;
+    }
+
+    void StartLootSession(string sig, List<LootOption> offers, bool keepBase)
+    {
+        lootGeneration++;
+        lootInvSig = sig;
+        lootOptions = offers;
+        lootWaiting = null;
+        lootMessage = "";
+        lootSeconds = 0;
+        lootStale = false;
+        if (!keepBase) { lootBase = null; lootBaseRun = null; lootBaseBuilt = false; }
+        lootTotal = (LootBaseResultFor(lootBase) != null ? 0 : 1) + offers.Count(o => o.Note == null);
+        lootProgress = 0;
+        lootClock = Stopwatch.StartNew();
+    }
+
+    void MergeOffers(List<LootOption> offers)
+    {
+        var old = lootOptions.ToDictionary(o => o.Key);
+        var merged = new List<LootOption>();
+        int added = 0;
+        foreach (var o in offers)
+        {
+            if (old.TryGetValue(o.Key, out var prev) && prev.Note == o.Note)
+            {
+                prev.Price = o.Price;
+                merged.Add(prev);
+            }
+            else
+            {
+                merged.Add(o);
+                if (o.Note == null) added++;
+            }
+        }
+        lootOptions = merged;
+        if (added == 0) return;
+        lootTotal = merged.Count(o => o.Note == null && !o.Done) + (LootBaseResultFor(lootBase) != null ? 0 : 1);
+        lootProgress = 0;
+        lootClock = Stopwatch.StartNew();
+    }
 
     void StopLoot()
     {
         lootOpen = false;
         lootGeneration++;
-        lootBuildNext = -2;
         lootOptions = null;
+        lootWaiting = null;
         lootBase = null;
-        lootKey = null;
+        lootBaseRun = null;
+        lootBaseBuilt = false;
+        lootScene = null;
+        lootInvSig = null;
         lootMessage = "";
         lootSephirite = null;
+        lootKind = LootKind.None;
     }
 
-    void StartLoot(Sephirite sep)
+    void ClassifyOffer(LootOption o, ItemEntity e, GridInventory inv)
     {
-        lootGeneration++;
-        lootOptions = new List<LootOption>();
-        lootBase = null;
-        lootMessage = "";
-        lootSeconds = 0;
-        lootStale = false;
-        var avatar = LocalAvatar();
-        var inv = avatar != null ? avatar.Inventory : null;
-        if (inv == null) { lootMessage = Tr("arrange.only_available_during_run"); lootBuildNext = -2; return; }
-        var dm = DungeonManager.Instance;
-        int Enchant(int instance) => dm != null && int.TryParse(dm.GetGlobalItemStatValue(instance, "Enchant"), out var v) ? v : 0;
-        foreach (var r in sep.Rewards)
-        {
-            var e = ItemDatabase.FindItemById(r.entityID);
-            var o = new LootOption
-            {
-                EntityId = r.entityID, InstanceId = r.instanceID,
-                Name = e != null ? ItemName(r.entityID) : r.entityID.ToString(),
-                Rarity = e != null ? (int)e.rarity : 0
-            };
-            lootOptions.Add(o);
-            if (e == null || (e.type != EItemType.Charm && e.type != EItemType.StoneTablet)) { o.Note = Tr("loot.not_artifact_or_tablet"); continue; }
-            o.IsTablet = e.type == EItemType.StoneTablet;
-            var charm = !o.IsTablet && e.resourcePrefab != null ? e.resourcePrefab.GetComponent<Charm_Basic>() : null;
-            try
-            {
-                if (charm != null && charm.isUniqueEffect && charm.connectedUniqueItems != null)
-                    foreach (var cu in charm.connectedUniqueItems)
-                        if (cu != null && inv.HasItem(cu, out _, out _, out _)) { o.Note = Tr("loot.conflicts_with_owned", ItemName(cu.id)); break; }
-                if (o.Note != null) continue;
-                if (charm != null && inv.uniquePairCount > 0 && inv.HasItem(e, out var hx, out var hy, out _))
-                {
-                    var owned = inv.FindItem(hx, hy);
-                    if (owned == null || owned.Charm == null || owned.Charm.maxLevel <= 0 || Enchant(owned.InstanceID) >= owned.Charm.maxLevel)
-                    {
-                        o.Note = Tr("loot.cannot_merge_max_level");
-                        continue;
-                    }
-                    o.Merge = true;
-                    o.MergeInstance = owned.InstanceID;
-                    o.MergeLevels = 1 + Enchant(r.instanceID);
-                    int mode = 2, up = inv.uniquePairAddedComboCount.TryGetValue(owned.InstanceID, out var u) ? u : 0;
-                    try { mode = KeywordDatabase.GetConstValue("allowUniquePairIncreaseCombo"); } catch { }
-                    o.MergeCats = mode == 1 ? Math.Max(0, Math.Min(o.MergeLevels, owned.Charm.maxLevel - up))
-                                : mode == 2 ? (up > 0 ? 0 : 1) : 0;
-                    continue;
-                }
-                if (charm != null && (inv.TryGetUniqueEffect(e, out _) || (charm.isUniqueEffect && inv.HasItem(e, out _, out _, out _))))
-                    o.Note = Tr("loot.already_have_unique");
-            }
-            catch (Exception ex) { WarnOnce("掉落评估：拿取规则", ex); }
-        }
-        lootTotal = 1 + lootOptions.Count(o => o.Note == null);
-        lootProgress = 0;
-        lootClock = Stopwatch.StartNew();
-        lootBuildNext = -1;
-    }
-
-    void BuildNextLootModel()
-    {
-        var avatar = LocalAvatar();
-        if (avatar == null || lootOptions == null) { lootBuildNext = -2; return; }
+        if (e == null || (e.type != EItemType.Charm && e.type != EItemType.StoneTablet)) { o.Note = Tr("loot.not_artifact_or_tablet"); return; }
+        o.IsTablet = e.type == EItemType.StoneTablet;
+        var charm = !o.IsTablet && e.resourcePrefab != null ? e.resourcePrefab.GetComponent<Charm_Basic>() : null;
         try
         {
-            if (lootBuildNext == -1)
+            if (charm != null && charm.isUniqueEffect && charm.connectedUniqueItems != null)
+                foreach (var cu in charm.connectedUniqueItems)
+                    if (cu != null && inv.HasItem(cu, out _, out _, out _)) { o.Note = Tr("loot.conflicts_with_owned", ItemName(cu.id)); return; }
+            if (charm != null && inv.uniquePairCount > 0 && inv.HasItem(e, out var hx, out var hy, out _))
+            {
+                var owned = inv.FindItem(hx, hy);
+                if (owned == null || owned.Charm == null || owned.Charm.maxLevel <= 0 || ItemEnchant(owned.InstanceID) >= owned.Charm.maxLevel)
+                {
+                    o.Note = Tr("loot.cannot_merge_max_level");
+                    return;
+                }
+                o.Merge = true;
+                o.MergeInstance = owned.InstanceID;
+                o.MergeLevels = 1 + ItemEnchant(o.InstanceId);
+                int mode = 2, up = inv.uniquePairAddedComboCount.TryGetValue(owned.InstanceID, out var u) ? u : 0;
+                try { mode = KeywordDatabase.GetConstValue("allowUniquePairIncreaseCombo"); } catch { }
+                o.MergeCats = mode == 1 ? Math.Max(0, Math.Min(o.MergeLevels, owned.Charm.maxLevel - up))
+                            : mode == 2 ? (up > 0 ? 0 : 1) : 0;
+                return;
+            }
+            if (charm != null && (inv.TryGetUniqueEffect(e, out _) || (charm.isUniqueEffect && inv.HasItem(e, out _, out _, out _))))
+                o.Note = Tr("loot.already_have_unique");
+        }
+        catch (Exception ex) { WarnOnce("掉落评估：拿取规则", ex); }
+    }
+
+    static int ItemEnchant(int instance)
+    {
+        var dm = DungeonManager.Instance;
+        return dm != null && int.TryParse(dm.GetGlobalItemStatValue(instance, "Enchant"), out var v) ? v : 0;
+    }
+
+    bool BuildNextLootModel()
+    {
+        if (lootOptions == null) return false;
+        var avatar = LocalAvatar();
+        if (avatar == null) return false;
+        if (!lootBaseBuilt)
+        {
+            lootBaseBuilt = true;
+            try
             {
                 lootBase = BuildLootModel(avatar, null, out var err);
-                if (lootBase == null) { lootMessage = err ?? Tr("loot.model_failed", ""); lootOptions = null; lootBuildNext = -2; return; }
+                if (lootBase == null) { lootMessage = err ?? Tr("loot.model_failed", ""); lootOptions = null; }
             }
-            else
+            catch (Exception e)
             {
-                var o = lootOptions[lootBuildNext];
-                if (o.Note == null)
-                {
-                    o.Model = BuildLootModel(avatar, o, out var err);
-                    if (o.Model == null) { o.Error = err ?? Tr("loot.model_failed", ""); o.Done = true; }
-                }
+                WarnOnce("掉落评估建模", e);
+                lootMessage = Tr("loot.model_failed", e.Message);
+                lootOptions = null;
             }
+            return true;
+        }
+        var o = lootOptions.FirstOrDefault(x => x.Note == null && !x.Built && !x.Done);
+        if (o == null) return false;
+        o.Built = true;
+        if (o.FromBase) return false;
+        try
+        {
+            o.Model = BuildLootModel(avatar, o, out var err);
+            if (o.Model == null) { o.Error = err ?? Tr("loot.model_failed", ""); o.Done = true; }
         }
         catch (Exception e)
         {
             WarnOnce("掉落评估建模", e);
-            if (lootBuildNext == -1) { lootMessage = Tr("loot.model_failed", e.Message); lootOptions = null; lootBuildNext = -2; return; }
-            var o = lootOptions[lootBuildNext];
             o.Error = Tr("loot.model_failed", e.Message);
             o.Done = true;
         }
-        lootBuildNext++;
-        if (lootBuildNext < lootOptions.Count) return;
-        lootBuildNext = -2;
-        StartLootTask();
+        return true;
     }
 
     ArrModel BuildLootModel(PlayerAvatar avatar, LootOption o, out string error)
     {
-        lootPick = o != null && !o.Merge ? new LootPick { EntityId = o.EntityId, InstanceId = o.InstanceId, Rotation = lootSephirite != null ? lootSephirite.rotation : 0 } : null;
+        int rot = o == null ? 0 : o.EnterRot >= 0 ? o.EnterRot : lootSephirite != null ? lootSephirite.rotation : 0;
+        lootPick = o != null && !o.Merge ? new LootPick { EntityId = o.EntityId, InstanceId = o.InstanceId, Rotation = rot } : null;
         try
         {
             var m = BuildModel(avatar, settings.arrMoveOthers, out var charmOf, out error);
@@ -235,32 +318,44 @@ public partial class SephiriaToolbox
     {
         var baseModel = lootBase;
         var opts = lootOptions;
-        if (baseModel == null || opts == null) return;
+        if (baseModel == null || opts == null || !lootBaseBuilt) return;
+        var todo = opts.Where(o => o.Built && !o.Queued && !o.Done && o.Note == null && (o.Model != null || o.FromBase)).ToList();
+        var known = LootBaseResultFor(baseModel);
+        if (todo.Count == 0 && known != null) return;
+        if (opts.Any(o => o.Note == null && !o.Built && !o.Done)) return;
+        foreach (var o in todo) o.Queued = true;
         int gen = lootGeneration, seed = Environment.TickCount;
         bool rotate = settings.arrRotate;
-        var todo = opts.Where(o => o.Model != null).ToList();
-        lootTotal = 1 + todo.Count;
         lootTask = Task.Run(() =>
         {
-            var baseResult = Optimize(baseModel, rotate, LootBaseBudget, seed);
-            if (gen != lootGeneration) return;
-            lootProgress = 1;
+            var br = known;
+            if (br == null)
+            {
+                br = Optimize(baseModel, rotate, LootBaseBudget, seed);
+                lootBaseRun = new LootBaseRun { Model = baseModel, Result = br };
+                if (gen != lootGeneration) return;
+                Interlocked.Increment(ref lootProgress);
+            }
             void Run(LootOption o, int k, double budget, int chains)
             {
-                try { EvaluateLootOption(baseModel, baseResult, o, rotate, seed + 7919 * (k + 1), budget, chains); }
+                try
+                {
+                    if (o.FromBase) o.Model = baseModel.CloneForLevels();
+                    EvaluateLootOption(baseModel, br, o, rotate, seed + 7919 * (k + 1), budget, chains);
+                }
                 catch (Exception e) { o.Failure = e; o.Error = Tr("loot.calculation_error", e.Message); }
                 o.Model = null;
                 o.Done = true;
                 Interlocked.Increment(ref lootProgress);
             }
-            var charms = todo.Where(o => !o.IsTablet).ToList();
+            var charms = todo.Where(o => !o.IsTablet || o.Merge).ToList();
             int degree = Math.Max(1, Math.Min(charms.Count, Environment.ProcessorCount / 2));
             Parallel.For(0, charms.Count, new ParallelOptions { MaxDegreeOfParallelism = degree }, (k, state) =>
             {
                 if (gen != lootGeneration) { state.Stop(); return; }
                 Run(charms[k], k, LootCharmBudget, 1);
             });
-            var tablets = todo.Where(o => o.IsTablet).ToList();
+            var tablets = todo.Where(o => o.IsTablet && !o.Merge).ToList();
             for (int k = 0; k < tablets.Count && gen == lootGeneration; k++)
                 Run(tablets[k], charms.Count + k, LootTabletBudget, 0);
         });

@@ -35,7 +35,7 @@ A DPS meter, combat statistics and inventory arrangement mod for *Sephiria*. Wor
   - Scenario: single target, multiple targets
 - Artifact value table: how DPS changes if an artifact gains one more level, or is removed.
 - Enhance advice: compares the weapons your current weapon can be enhanced into and recommends one (of little use if you already know your preset well).
-- Reward evaluation: when a Sephirite reward opens, each artifact / tablet option is evaluated by assuming you take it and finding the best layout again, compared with the best layout without it. It shows the gain, where to place it (and how to rotate a tablet), which item to drop if the inventory is full, and merges with the unique-pair talent. Takes about 5–15 seconds in the background (artifact options are computed in parallel); advice only.
+- Reward / shop / enchant evaluation: when a Sephirite reward, a shop or an enchant altar (or potion) is open, each option is evaluated by assuming you take it — pick the reward, buy the item, or enchant the artifact (+1 level) — and finding the best layout again, compared with the best layout without it. It shows the gain, where to place a new item (and how to rotate a tablet), which item to drop if the inventory is full, prices, and merges with the unique-pair talent. After a reroll or a sapphire restock only the new options are computed. Takes about 5–15 seconds in the background (artifact options are computed in parallel); advice only.
 - Tablet Imprinting advice: with the imprinting talent, shows which tablet is most worth imprinting. **Suggestions only — it never imprints a tablet by itself.**
 - Calculations run on a background thread and do not block the game's main thread.
 

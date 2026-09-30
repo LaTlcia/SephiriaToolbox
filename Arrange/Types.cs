@@ -29,6 +29,8 @@ public partial class SephiriaToolbox
         public int UniqueGroup = -1;
         public int ActualLevel;
         public bool ActualEnabled;
+
+        public ArrItem Clone() => (ArrItem)MemberwiseClone();
     }
 
     struct Cond { public int Slot; public byte Type; }
@@ -72,6 +74,14 @@ public partial class SephiriaToolbox
         public int FreeRotTablet = -1;
         public bool CanEngrave;
         public int EngraveTablet = -1;
+
+        public ArrModel CloneForLevels()
+        {
+            var c = (ArrModel)MemberwiseClone();
+            c.Items = Items.Select(it => it.Clone()).ToArray();
+            c.Notes = new List<string>();
+            return c;
+        }
 
         public ArrModel CloneForEngrave(int t)
         {

@@ -156,8 +156,9 @@ public partial class SephiriaToolbox
         d.ComboBonus = avatar.GetCustomStatUnsafe("COMBOBONUSDAMAGE");
         d.kComboBonus = key("COMBOBONUSDAMAGE");
 
-        string[] kindNames = { Tr("model.crystal_harmony"), Tr("model.glowing_hourglass"), Tr("model.amplifier_points_adjacent_artifact"), Tr("model.giant_telescope"), Tr("model.auto_cast"), Tr("model.element_row"), Tr("model.left_right_half_stats"), Tr("model.white_paper"), Tr("model.devotion_insignia"), Tr("model.wooden_box_quick_slot") };
-        foreach (var g in d.Specials.GroupBy(sp => sp.Kind)) m.Notes.Add($"{kindNames[(int)g.Key]} ×{g.Count()}");
+        string[] kindNames = { Tr("model.crystal_harmony"), Tr("model.glowing_hourglass"), Tr("model.amplifier_points_adjacent_artifact"), Tr("model.giant_telescope"), Tr("model.auto_cast"), Tr("model.element_row"), Tr("model.left_right_half_stats"), Tr("model.white_paper"), Tr("model.devotion_insignia"), Tr("model.wooden_box_quick_slot"), null, Tr("model.cost_left") };
+        foreach (var g in d.Specials.GroupBy(sp => sp.Kind))
+            if ((int)g.Key < kindNames.Length && kindNames[(int)g.Key] != null) m.Notes.Add($"{kindNames[(int)g.Key]} ×{g.Count()}");
         int planets = d.Extra.Count(e => e.Planet);
         if (planets > 0) m.Notes.Add(Tr("model.planets", planets));
         if (d.Specials.Any(sp => sp.Kind is SpecialKind.WhitePaper or SpecialKind.Booster or SpecialKind.ByRow))
