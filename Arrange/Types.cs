@@ -67,6 +67,9 @@ public partial class SephiriaToolbox
         public bool[] KeepSideLeft;
         public int[][] Patterns;
         public List<string> Notes = new();
+        public int Bench;
+        public int NewItem = -1;
+        public int FreeRotTablet = -1;
         public bool CanEngrave;
         public int EngraveTablet = -1;
 

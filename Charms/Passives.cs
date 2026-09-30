@@ -34,6 +34,7 @@ public partial class SephiriaToolbox
                 UpFirstHit = 0.1f, UpShield = 0.5f, NormalEnemyShare = 0.7f;
 
     static bool buildSingle;
+    static UnitAvatar buildOwner;
     static double NormalShare() => buildSingle ? 0 : NormalEnemyShare;
 
     static double CloseUptime(PlayerAvatar a, double range = 2.5, bool wide = false)

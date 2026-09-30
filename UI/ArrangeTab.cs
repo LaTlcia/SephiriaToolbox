@@ -60,6 +60,8 @@ public partial class SephiriaToolbox
         bool others = GUILayout.Toggle(settings.arrMoveOthers, Tr("arrange.other_items_may_move"), GUILayout.Width(160));
         bool protect = dpsGoal ? GUILayout.Toggle(settings.arrProtect, Tr("arrange.keep_active_artifacts_active"), GUILayout.Width(200)) : settings.arrProtect;
         GUILayout.EndHorizontal();
+        bool loot = GUILayout.Toggle(settings.lootAuto, Tr("loot.auto"));
+        if (loot != settings.lootAuto) Defer(() => { settings.lootAuto = loot; SaveSettings(); });
         if (rot != settings.arrRotate) Defer(() => { settings.arrRotate = rot; SaveSettings(); });
         if (others != settings.arrMoveOthers) Defer(() => { settings.arrMoveOthers = others; SaveSettings(); });
         if (protect != settings.arrProtect) Defer(() => { settings.arrProtect = protect; SaveSettings(); });

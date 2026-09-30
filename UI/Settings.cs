@@ -19,6 +19,8 @@ public partial class SephiriaToolbox
         public bool arrUseMeasured;
         public bool arrSingle = true;
         public float wWeapon = 1f, wMagic = 1f, wProc = 1f;
+        public bool lootAuto = true;
+        public float lootX = -1f, lootY = -1f;
         public List<float> bossFights = new();
         public List<int> bossPhases = new();
         public int bossDebuffSamples, bossOtherBurn, bossOtherFrost;

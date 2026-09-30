@@ -35,10 +35,17 @@ public partial class SephiriaToolbox
     }
 
     const double HardPenalty = 1e8;
+    const double SeedTempFactor = 0.1;
 
     static int BrokenConstraints(ArrModel m, Evaluator ev, int[] perm)
     {
         int broken = 0;
+        for (int b = m.N; b < perm.Length; b++)
+            if (perm[b] >= 0 && perm[b] != m.NewItem)
+            {
+                for (int s = 0; s < m.N; s++)
+                    if (perm[s] < 0) { broken++; break; }
+            }
         if (m.KeepSideItem != null)
             for (int k = 0; k < m.KeepSideItem.Length; k++)
             {
@@ -67,9 +74,8 @@ public partial class SephiriaToolbox
         return false;
     }
 
-    static ArrResult Optimize(ArrModel m, bool allowRotate, double budgetSeconds, int seed)
+    static void PrepareModel(ArrModel m)
     {
-        var clock = Stopwatch.StartNew();
         BuildGeoms(m);
         var ev0 = new Evaluator(m);
         ev0.Levels(m.Start, m.StartRot);
@@ -97,11 +103,18 @@ public partial class SephiriaToolbox
             m.Norm = ev0.Dps();
             if (m.Norm <= 1e-9) m.Dps = null;
         }
+    }
+
+    static ArrResult Optimize(ArrModel m, bool allowRotate, double budgetSeconds, int seed, int[] seedPerm = null, int[] seedRot = null, int maxChains = 0)
+    {
+        var clock = Stopwatch.StartNew();
+        PrepareModel(m);
         bool dpsGoal = m.Dps != null;
         double T0 = dpsGoal ? 300 : 15000, T1 = dpsGoal ? 0.3 : 5;
 
-        var slots = Enumerable.Range(0, m.N).Where(s => m.Movable[s]).ToArray();
-        var rotTablets = allowRotate ? Enumerable.Range(0, m.TabletItem.Length).Where(t => m.Items[m.TabletItem[t]].Rotatable).ToArray() : new int[0];
+        var slots = Enumerable.Range(0, m.N + m.Bench).Where(s => m.Movable[s]).ToArray();
+        var rotTablets = Enumerable.Range(0, m.TabletItem.Length)
+            .Where(t => m.Items[m.TabletItem[t]].Rotatable && (allowRotate || t == m.FreeRotTablet)).ToArray();
         var rotatableItem = new bool[m.Items.Length];
         foreach (var t in rotTablets) rotatableItem[m.TabletItem[t]] = true;
         int tabletCount = m.TabletItem.Length;
@@ -109,7 +122,7 @@ public partial class SephiriaToolbox
         var stampRotatable = stamps.Select(t => allowRotate && m.Items[m.TabletItem[t]].Rotatable).ToArray();
 
         long evals = 0;
-        int chains = Math.Max(1, Math.Min(4, Environment.ProcessorCount / 2));
+        int chains = maxChains > 0 ? maxChains : Math.Max(1, Math.Min(4, Environment.ProcessorCount / 2));
         var bestPerms = new int[chains][];
         var bestRots = new int[chains][];
         var bestScores = new double[chains];
@@ -119,8 +132,9 @@ public partial class SephiriaToolbox
         {
             var ev = new Evaluator(m);
             var rng = new System.Random(seed + c * 7919);
-            var perm = (int[])m.Start.Clone();
-            var rot = (int[])m.StartRot.Clone();
+            bool fromSeed = c == 0 && seedPerm != null && seedRot != null;
+            var perm = (int[])(fromSeed ? seedPerm : m.Start).Clone();
+            var rot = (int[])(fromSeed ? seedRot : m.StartRot).Clone();
             if (c >= 2)
             {
                 for (int i = slots.Length - 1; i > 0; i--)
@@ -137,7 +151,8 @@ public partial class SephiriaToolbox
             double best = cur;
             long local = 1;
             var sw = Stopwatch.StartNew();
-            double temp = T0;
+            double t0 = fromSeed ? T0 * SeedTempFactor : T0;
+            double temp = t0;
             int step = 0;
             if (slots.Length >= 2)
             {
@@ -147,7 +162,7 @@ public partial class SephiriaToolbox
                     {
                         double frac = sw.Elapsed.TotalSeconds / budget;
                         if (frac >= 1) break;
-                        temp = T0 * Math.Pow(T1 / T0, frac);
+                        temp = t0 * Math.Pow(T1 / t0, frac);
                     }
                     double r = rng.NextDouble();
                     if (stamps.Length > 0 && r < 0.2)
@@ -268,9 +283,12 @@ public partial class SephiriaToolbox
             result.Rot = (int[])m.StartRot.Clone();
             result.After = result.Before;
         }
-        var plan = PlanSteps(m, result.Perm, result.Rot);
-        result.Swaps = plan.Count(p => p.Swap);
-        result.Rotations = plan.Count(p => !p.Swap);
+        if (m.Bench == 0)
+        {
+            var plan = PlanSteps(m, result.Perm, result.Rot);
+            result.Swaps = plan.Count(p => p.Swap);
+            result.Rotations = plan.Count(p => !p.Swap);
+        }
         return result;
     }
 }

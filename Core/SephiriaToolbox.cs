@@ -104,6 +104,7 @@ public partial class SephiriaToolbox : MonoBehaviour
         SaveSettingsIfDirty();
         UpdateUiLanguage();
         UpdateArrange();
+        try { UpdateLoot(); } catch (Exception e) { WarnOnce("掉落评估", e); }
         try { TrackSwings(); } catch (Exception e) { WarnOnce("出手速度", e); }
         try { TrackSpecials(); } catch (Exception e) { WarnOnce("特殊攻击次数", e); }
         try { TrackDefends(); TrackGuardHold(); } catch (Exception e) { WarnOnce("格挡 / 弹反", e); }

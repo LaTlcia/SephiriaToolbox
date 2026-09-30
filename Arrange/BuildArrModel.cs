@@ -10,6 +10,20 @@ using Debug = UnityEngine.Debug;
 
 public partial class SephiriaToolbox
 {
+    LootPick lootPick;
+
+    sealed class LootPick
+    {
+        public int EntityId, InstanceId;
+        public int Rotation;
+    }
+
+    static bool ConstCriteria(Charm_Basic c, PlayerAvatar avatar)
+    {
+        if (c.criteria is CharmActivateCriteria_FullHP) return avatar != null && avatar.hp >= avatar.MaxHp;
+        try { return c.criteria.GetCriteria(c); } catch { return true; }
+    }
+
     ArrModel BuildModel(PlayerAvatar avatar, bool moveOtherItems, out Charm_Basic[] charmOf, out string error)
     {
         error = null;
@@ -78,6 +92,55 @@ public partial class SephiriaToolbox
             items.Add(it);
             charms.Add(charm);
         }
+        int liveTablets = tablets.Count;
+        var tabletIds = tablets.Select(t => t.instanceID).ToList();
+
+        int bench = 0, newItem = -1, newTablet = -1;
+        if (lootPick != null)
+        {
+            var e = ItemDatabase.FindItemById(lootPick.EntityId);
+            var prefab = e != null ? e.resourcePrefab : null;
+            var it = new ArrItem
+            {
+                InstanceId = lootPick.InstanceId,
+                EntityId = lootPick.EntityId,
+                Name = ItemName(lootPick.EntityId),
+                Rarity = e != null ? (int)e.rarity : 0,
+                Kind = KindItem
+            };
+            Charm_Basic charm = null;
+            if (e != null && e.type == EItemType.Charm && prefab != null && prefab.TryGetComponent<Charm_Basic>(out var c))
+            {
+                charm = c;
+                it.Kind = c is Charm_Magic ? KindMagic : KindCharm;
+                it.MaxLevel = c.maxLevel;
+                it.Crit = CritOf(c);
+                if (it.Crit == Crit.Const) it.CritConst = ConstCriteria(c, avatar);
+                it.WeaponOk = !c.isWeaponRelatedCharm || (weaponType.HasValue && weaponType.Value == c.relatedWeapon);
+                if (dm != null && int.TryParse(dm.GetGlobalItemStatValue(lootPick.InstanceId, "Enchant"), out var ench)) it.Enchant = ench;
+                if (c.isUniqueEffect)
+                {
+                    if (!uniqueGroups.TryGetValue(lootPick.EntityId, out var g)) uniqueGroups[lootPick.EntityId] = g = uniqueGroups.Count;
+                    it.UniqueGroup = g;
+                }
+            }
+            else if (e != null && e.type == EItemType.StoneTablet && prefab != null && prefab.TryGetComponent<StoneTablet>(out var st))
+            {
+                it.IsTablet = true;
+                it.TabletIndex = newTablet = tablets.Count;
+                it.Rotatable = DungeonManager.IsTabletRotatable(lootPick.InstanceId, st.isRotatable);
+                it.StartRotation = it.Rotatable ? ((lootPick.Rotation % 4) + 4) % 4 : 0;
+                tablets.Add(st);
+                tabletIds.Add(lootPick.InstanceId);
+            }
+            else { error = Tr("loot.not_artifact_or_tablet"); return null; }
+            newItem = items.Count;
+            items.Add(it);
+            charms.Add(charm);
+            bench = 1;
+            Array.Resize(ref start, n + bench);
+            start[n] = newItem;
+        }
         if (!items.Any(i => i.Kind >= KindCharm)) { error = Tr("arrange.no_artifacts_inventory"); return null; }
 
         var engravings = inv.engravings.Where(t => t != null).ToList();
@@ -90,8 +153,11 @@ public partial class SephiriaToolbox
             CanEngrave = inv.tabletEngravingCount > 0,
             TabletItem = items.Select((it, idx) => (it, idx)).Where(p => p.it.IsTablet).Select(p => p.idx).ToArray(),
             UniqueGroups = uniqueGroups.Count,
-            Movable = new bool[n],
-            TabletRules = tablets.Select(t => new TabletRule { Condition = t.GetConditionQuery(t.instanceID), Effect = t.GetQuery(t.instanceID) }).ToArray(),
+            Movable = new bool[n + bench],
+            Bench = bench,
+            NewItem = newItem,
+            FreeRotTablet = newTablet,
+            TabletRules = tablets.Select((t, k) => new TabletRule { Condition = t.GetConditionQuery(tabletIds[k]), Effect = t.GetQuery(tabletIds[k]) }).ToArray(),
             EngravingRules = engravings.Select(t => new TabletRule
             {
                 Condition = t.GetConditionQuery(t.instanceID), Effect = t.GetQuery(t.instanceID),
@@ -101,9 +167,10 @@ public partial class SephiriaToolbox
         };
         for (int s = 0; s < n; s++)
             m.Movable[s] = moveOtherItems || start[s] < 0 || m.Items[start[s]].Kind >= KindCharm || m.Items[start[s]].IsTablet;
+        for (int s = n; s < n + bench; s++) m.Movable[s] = true;
 
         var tabInc = new int[n]; var tabMul = new int[n]; var tabDis = new int[n]; var tabIgn = new int[n];
-        foreach (var t in tablets.Concat(engravings))
+        foreach (var t in tablets.Take(liveTablets).Concat(engravings))
         {
             if (!t.IsApplied) continue;
             foreach (var e in t.EffectRange)
@@ -133,7 +200,7 @@ public partial class SephiriaToolbox
         }
         charmOf = charms.ToArray();
 
-        var keep = Enumerable.Range(0, m.Items.Length).Where(i => charms[i] is Charm_FireIceWeapon).ToArray();
+        var keep = Enumerable.Range(0, m.Items.Length).Where(i => charms[i] is Charm_FireIceWeapon && i != newItem).ToArray();
         if (keep.Length > 0)
         {
             m.KeepSideItem = keep;

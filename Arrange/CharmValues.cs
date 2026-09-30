@@ -22,7 +22,7 @@ public partial class SephiriaToolbox
         double baseDps = ev.Dps();
         if (!(baseDps > 0)) return null;
         var slotOf = Enumerable.Repeat(-1, m.Items.Length).ToArray();
-        for (int s = 0; s < perm.Length; s++) if (perm[s] >= 0) slotOf[perm[s]] = s;
+        for (int s = 0; s < perm.Length && s < m.N; s++) if (perm[s] >= 0) slotOf[perm[s]] = s;
         var list = new List<CharmValue>();
         for (int i = 0; i < m.Items.Length; i++)
         {

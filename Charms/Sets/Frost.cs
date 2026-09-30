@@ -50,7 +50,8 @@ public partial class SephiriaToolbox
             AddX(s, new XMod { Kind = XKind.RelicSwords, A = Math.Max(0.1, isw.swordLifeTime), B = Math.Max(1, isw.swordCount), C = hitsPerSword });
             double defMp = 50;
             try { defMp = KeywordDatabase.GetConstValue("PLAYERDEFAULTMP"); } catch { }
-            if (c.NetworkAvatar != null) AddX(s, new XMod { Kind = XKind.MaxMpScale, Levels = new[] { (float)c.NetworkAvatar.MaxMp, (float)defMp } });
+            var owner = c.NetworkAvatar != null ? c.NetworkAvatar : buildOwner;
+            if (owner != null) AddX(s, new XMod { Kind = XKind.MaxMpScale, Levels = new[] { (float)owner.MaxMp, (float)defMp } });
             s.TheoryK = 1;
             s.HasTheory = true;
         });

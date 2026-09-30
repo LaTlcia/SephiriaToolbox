@@ -43,4 +43,12 @@ public partial class SephiriaToolbox
 
         PassiveDefs["Charm_WarmStone"] = P(new PassiveDef { Kind = PKind.Stat, Key = "CRITICALDAMAGEBONUS", By = "criticalDamageByLevel" });
     }
+
+    static float ReddewDamage(Charm_Reddew rd, UnitAvatar avatar, int level)
+    {
+        int hi = Math.Max(Math.Max(avatar.GetCustomStat(ECustomStat.PhysicalDamage), avatar.GetCustomStat(ECustomStat.FireDamage)),
+                          Math.Max(avatar.GetCustomStat(ECustomStat.IceDamage), avatar.GetCustomStat(ECustomStat.LightningDamage)));
+        var t = rd.damagePercentByLevel;
+        return t == null || t.Length == 0 ? 0f : hi * t[Math.Min(Math.Max(level, 0), t.Length - 1)] / 100f;
+    }
 }

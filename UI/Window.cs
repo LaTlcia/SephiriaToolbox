@@ -58,6 +58,8 @@ public partial class SephiriaToolbox
         settings.scale = Mathf.Clamp(settings.scale, MinScale, MaxScale);
         windowRect.x = settings.x;
         windowRect.y = settings.y;
+        lootRect.x = settings.lootX;
+        lootRect.y = settings.lootY;
         tab = Mathf.Clamp(settings.tab, 0, Tabs.Length - 1);
     }
 
@@ -151,6 +153,7 @@ public partial class SephiriaToolbox
                 nextSettingsSave = Time.unscaledTime + 1f;
             }
             windowRect = r;
+            DrawLootGui(scale);
         }
         finally { GUI.matrix = prevMatrix; }
     }

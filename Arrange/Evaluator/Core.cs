@@ -150,7 +150,7 @@ public partial class SephiriaToolbox
         {
             this.perm = perm;
             for (int i = 0; i < ItemSlot.Length; i++) { ItemSlot[i] = -1; ItemOn[i] = false; ItemLevel[i] = 0; }
-            for (int s = 0; s < perm.Length; s++) if (perm[s] >= 0) ItemSlot[perm[s]] = s;
+            for (int s = 0; s < perm.Length && s < m.N; s++) if (perm[s] >= 0) ItemSlot[perm[s]] = s;
             int n = m.N;
             Array.Copy(m.BaseLevel, lvl, n);
             Array.Copy(m.BaseMult, mul, n);

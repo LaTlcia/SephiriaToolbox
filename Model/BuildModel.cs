@@ -86,6 +86,7 @@ public partial class SephiriaToolbox
         var play = MeasureBehavior(weapon, settings.arrSingle);
         d.Single = play.Single;
         buildSingle = play.Single;
+        buildOwner = avatar;
         buildWeapon = weapon;
         buildCloseCdf = play.Single ? BossCloseCdf() : null;
         buildHitRate = play.Single ? BossHitRate() : -1;
@@ -347,7 +348,7 @@ public partial class SephiriaToolbox
                         for (int l = 0; l < table.Length; l++)
                         {
                             c.limitedEffectEnabledLevel = l;
-                            table[l] = ac.GetDamage(avatar);
+                            table[l] = i == m.NewItem && c is Charm_Reddew rd ? ReddewDamage(rd, avatar, l) : ac.GetDamage(avatar);
                         }
                     }
                     finally { c.limitedEffectEnabledLevel = saved; }
