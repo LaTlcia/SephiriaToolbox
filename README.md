@@ -58,7 +58,7 @@ All interface text lives in the language packs `Lang/zh-CN.json` and `Lang/en-US
 
 ## Installation
 
-1. Get the `SephiriaToolbox` folder, which contains `SephiriaToolbox.dll` and `metadata.json`. Download the released zip, or build it yourself (see the next section).
+1. Get the `SephiriaToolbox` folder, which contains `SephiriaToolbox.dll` and `metadata.json`. ~~Download the released zip, or ~~build it yourself (see the next section).
 2. Put it into the game's `AddOns` folder (create the folder if it does not exist):
    - **Mac**: in Steam, right-click the game → Manage → Browse local files, then right-click `Sephiria.app` → Show Package Contents. Place it as `Sephiria.app/AddOns/SephiriaToolbox/`.
    - **Windows**: in the folder that contains `Sephiria.exe`, place it as `AddOns\SephiriaToolbox\`.

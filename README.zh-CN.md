@@ -58,7 +58,7 @@
 
 ## 安装
 
-1. 准备好 `SephiriaToolbox` 文件夹，里面有 `SephiriaToolbox.dll` 和 `metadata.json`。可以下载发布好的压缩包，也可以自己编译（见下一节）。
+1. 准备好 `SephiriaToolbox` 文件夹，里面有 `SephiriaToolbox.dll` 和 `metadata.json`。~~可以下载发布好的压缩包，也~~可以自己编译（见下一节）。
 2. 放进游戏的 `AddOns` 文件夹，没有就新建：
    - **Mac**：在 Steam 里右键游戏 →「管理」→「浏览本地文件」，右键 `Sephiria.app` →「显示包内容」。放成 `Sephiria.app/AddOns/SephiriaToolbox/`。
    - **Windows**：`Sephiria.exe` 所在的文件夹里，放成 `AddOns\SephiriaToolbox\`。
