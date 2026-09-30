@@ -1,0 +1,29 @@
+#dotnet build -c Release -o out
+bin/
+obj/
+out/
+
+*.zip
+
+*.dll
+*.pdb
+
+.DS_Store
+Thumbs.db
+desktop.ini
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.swp
+*~
+
+*.bak
+*.tmp
+*.new
+*.orig
+
+# Python
+__pycache__/
+*.pyc
