@@ -1,6 +1,6 @@
 {
   "modName": "SephiriaToolbox",
-  "modVersion": "0.22.0",
+  "modVersion": "0.22.1",
   "modAuthor": "LaTlcia",
   "dllFile": "SephiriaToolbox.dll",
   "entryClass": "SephiriaToolboxMod"

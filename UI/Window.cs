@@ -121,6 +121,13 @@ public partial class SephiriaToolbox
     void OnGUI()
     {
         if (!visible) return;
+        long perf0 = PerfStart();
+        try { DrawGui(); }
+        finally { PerfAdd(PerfPart.Gui, perf0); }
+    }
+
+    void DrawGui()
+    {
         if (!stylesReady)
         {
             stylesReady = true;

@@ -82,7 +82,7 @@ public partial class SephiriaToolbox
             if (hist.Sum() > 40000) for (int i = 0; i < hist.Length; i++) hist[i] /= 2;
             settings.bossAddSum += adds;
             settings.bossAddSamples++;
-            settingsDirty = true;
+            SettingsChangedLater();
         }
         else if (bossActive)
         {

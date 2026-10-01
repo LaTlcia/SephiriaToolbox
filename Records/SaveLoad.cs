@@ -41,12 +41,13 @@ public partial class SephiriaToolbox
         return list;
     }
 
-    void SaveRunLog()
+    volatile bool recordsWritten;
+
+    void SaveRunLog(bool sync = false)
     {
         if (history.Count == 0 && runResult == null) return;
         try
         {
-            Directory.CreateDirectory(LogDir);
             float end = runEnded ? runEndTime : lastActiveTime;
             var rec = new RunRecord
             {
@@ -72,9 +73,14 @@ public partial class SephiriaToolbox
                 official = official
             };
             string path = Path.Combine(LogDir, $"run_{runStartedAt:yyyyMMdd_HHmmss}.json");
-            File.WriteAllText(path, JsonConvert.SerializeObject(rec, JsonSettings));
             currentRunFile = path;
-            recordsDirty = true;
+            if (sync)
+            {
+                Directory.CreateDirectory(LogDir);
+                File.WriteAllText(path, JsonConvert.SerializeObject(rec, JsonSettings));
+                recordsDirty = true;
+            }
+            else WriteFileInBackground(path, () => JsonConvert.SerializeObject(rec, JsonSettings), () => recordsWritten = true);
         }
         catch (Exception e) { WarnOnce("保存记录", e); }
     }

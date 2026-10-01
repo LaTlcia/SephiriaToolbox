@@ -326,7 +326,7 @@ public partial class SephiriaToolbox
         foreach (var o in todo) o.Queued = true;
         int gen = lootGeneration, seed = Environment.TickCount;
         bool rotate = settings.arrRotate;
-        lootTask = Task.Run(() =>
+        lootTask = Task.Run(() => LowPriority(() =>
         {
             var br = known;
             if (br == null)
@@ -349,16 +349,16 @@ public partial class SephiriaToolbox
                 Interlocked.Increment(ref lootProgress);
             }
             var charms = todo.Where(o => !o.IsTablet || o.Merge).ToList();
-            int degree = Math.Max(1, Math.Min(charms.Count, Environment.ProcessorCount / 2));
+            int degree = Math.Max(1, Math.Min(charms.Count, WorkerThreads));
             Parallel.For(0, charms.Count, new ParallelOptions { MaxDegreeOfParallelism = degree }, (k, state) =>
             {
                 if (gen != lootGeneration) { state.Stop(); return; }
-                Run(charms[k], k, LootCharmBudget, 1);
+                LowPriority(() => Run(charms[k], k, LootCharmBudget, 1));
             });
             var tablets = todo.Where(o => o.IsTablet && !o.Merge).ToList();
             for (int k = 0; k < tablets.Count && gen == lootGeneration; k++)
                 Run(tablets[k], charms.Count + k, LootTabletBudget, 0);
-        });
+        }));
     }
 
     void EvaluateLootOption(ArrModel b, ArrResult br, LootOption o, bool rotate, int seed, double budget, int chains)

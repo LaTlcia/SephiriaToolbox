@@ -86,6 +86,8 @@ public partial class SephiriaToolbox : MonoBehaviour
 
     void Update()
     {
+        PerfFrame();
+        long t0 = PerfStart();
         var pending = deferred;
         deferred = null;
         pending?.Invoke();
@@ -100,29 +102,41 @@ public partial class SephiriaToolbox : MonoBehaviour
             if (kb.f5Key.wasPressedThisFrame || kb.pageUpKey.wasPressedThisFrame) Page(-1);
             if (kb.f6Key.wasPressedThisFrame || kb.pageDownKey.wasPressedThisFrame) Page(+1);
         }
+        if (recordsWritten) { recordsWritten = false; recordsDirty = true; }
+        ReportBackgroundWrites();
         if (visible && tab == TabRecords && recordsDirty) RefreshRecords();
         SaveSettingsIfDirty();
         UpdateUiLanguage();
+        PerfAdd(PerfPart.Other, t0);
+        t0 = PerfStart();
         UpdateArrange();
+        PerfAdd(PerfPart.Arrange, t0);
+        t0 = PerfStart();
         try { UpdateLoot(); } catch (Exception e) { WarnOnce("掉落评估", e); }
+        PerfAdd(PerfPart.Loot, t0);
+        t0 = PerfStart();
         try { TrackSwings(); } catch (Exception e) { WarnOnce("出手速度", e); }
         try { TrackSpecials(); } catch (Exception e) { WarnOnce("特殊攻击次数", e); }
         try { TrackDefends(); TrackGuardHold(); } catch (Exception e) { WarnOnce("格挡 / 弹反", e); }
         try { TrackBosses(); } catch (Exception e) { WarnOnce("Boss 战", e); }
         try { TrackBattles(); } catch (Exception e) { WarnOnce("战斗长度", e); }
         try { TrackEnemies(); } catch (Exception e) { WarnOnce("身边敌人数", e); }
+        PerfAdd(PerfPart.Track, t0);
 
         if (Time.unscaledTime < nextSample) return;
         nextSample = Time.unscaledTime + SampleInterval;
+        t0 = PerfStart();
         try { Sample(); } catch (Exception e) { WarnOnce("采样", e); }
+        PerfAdd(PerfPart.Sample, t0);
     }
 
     void OnApplicationQuit()
     {
-        SaveSettings();
+        FlushBackgroundWrites();
+        SaveSettings(sync: true);
         if (runEnded) return;
         FinishFloor(lastActiveTime > 0f ? lastActiveTime : Time.unscaledTime);
-        SaveRunLog();
+        SaveRunLog(sync: true);
     }
 
     void Sample()
@@ -223,7 +237,8 @@ public partial class SephiriaToolbox : MonoBehaviour
         if (!gameOverLabel && Time.unscaledTime >= nextLabelSearch)
         {
             nextLabelSearch = Time.unscaledTime + 1f;
-            gameOverLabel = FindAnyObjectByType<UI_GameOverLabel>(FindObjectsInactive.Include);
+            try { gameOverLabel = UIManager.Instance != null ? UIManager.Instance.GetElement<UI_GameOverLabel>() : null; }
+            catch { gameOverLabel = null; }
         }
         bool open = gameOverLabel && gameOverLabel.IsOpened;
         bool opened = open && !gameOverWasOpen;

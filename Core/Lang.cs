@@ -21,11 +21,32 @@ public partial class SephiriaToolbox
     static readonly Dictionary<string[], string[]> resolvedArrays = new();
     float nextLangCheck;
 
-    static string Tr(string key) => TokOpen + key + TokClose;
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> arglessTokens = new(StringComparer.Ordinal);
+    [ThreadStatic] static StringBuilder trBuilder;
+
+    static string Tr(string key) => arglessTokens.GetOrAdd(key, k => TokOpen + k + TokClose);
+
+    static void AppendNumber(StringBuilder sb, char type, long v)
+    {
+        Span<char> buf = stackalloc char[24];
+        sb.Append(TokNum).Append(type);
+        if (v.TryFormat(buf, out int n, default, CultureInfo.InvariantCulture)) sb.Append(buf.Slice(0, n));
+        else sb.Append(v.ToString(CultureInfo.InvariantCulture));
+    }
+
+    static void AppendNumber(StringBuilder sb, char type, double v, bool single)
+    {
+        Span<char> buf = stackalloc char[40];
+        sb.Append(TokNum).Append(type);
+        bool ok = single ? ((float)v).TryFormat(buf, out int n, "G9", CultureInfo.InvariantCulture) : v.TryFormat(buf, out n, "G17", CultureInfo.InvariantCulture);
+        if (ok) sb.Append(buf.Slice(0, n));
+        else sb.Append(single ? ((float)v).ToString("G9", CultureInfo.InvariantCulture) : v.ToString("G17", CultureInfo.InvariantCulture));
+    }
 
     static string Tr(string key, params object[] args)
     {
-        var sb = new StringBuilder(key.Length + 16 * (args?.Length ?? 0) + 2);
+        var sb = trBuilder ??= new StringBuilder(128);
+        sb.Clear();
         sb.Append(TokOpen).Append(key);
         if (args != null)
             foreach (var a in args)
@@ -35,11 +56,11 @@ public partial class SephiriaToolbox
                 {
                     case null: break;
                     case string s: sb.Append(s); break;
-                    case int v: sb.Append(TokNum).Append('i').Append(v.ToString(CultureInfo.InvariantCulture)); break;
-                    case long v: sb.Append(TokNum).Append('l').Append(v.ToString(CultureInfo.InvariantCulture)); break;
-                    case short or byte or sbyte or ushort or uint: sb.Append(TokNum).Append('l').Append(Convert.ToInt64(a).ToString(CultureInfo.InvariantCulture)); break;
-                    case float v: sb.Append(TokNum).Append('f').Append(v.ToString("G9", CultureInfo.InvariantCulture)); break;
-                    case double v: sb.Append(TokNum).Append('d').Append(v.ToString("G17", CultureInfo.InvariantCulture)); break;
+                    case int v: AppendNumber(sb, 'i', v); break;
+                    case long v: AppendNumber(sb, 'l', v); break;
+                    case short or byte or sbyte or ushort or uint: AppendNumber(sb, 'l', Convert.ToInt64(a)); break;
+                    case float v: AppendNumber(sb, 'f', v, single: true); break;
+                    case double v: AppendNumber(sb, 'd', v, single: false); break;
                     case decimal v: sb.Append(TokNum).Append('m').Append(v.ToString(CultureInfo.InvariantCulture)); break;
                     default: sb.Append(Convert.ToString(a, CultureInfo.CurrentCulture)); break;
                 }
@@ -190,7 +211,16 @@ public partial class SephiriaToolbox
         return entries;
     }
 
-    static bool HasPack(string lang) => EmbeddedPack(lang) != null || ExternalPack(lang) != null;
+    static readonly Dictionary<string, bool> packExists = new(StringComparer.Ordinal);
+
+    static bool HasPack(string lang)
+    {
+        lock (packExists)
+            if (packExists.TryGetValue(lang, out var has)) return has;
+        bool h = EmbeddedPack(lang) != null || ExternalPack(lang) != null;
+        lock (packExists) packExists[lang] = h;
+        return h;
+    }
 
     static List<string> AvailableUiLangs()
     {

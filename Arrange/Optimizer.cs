@@ -122,13 +122,13 @@ public partial class SephiriaToolbox
         var stampRotatable = stamps.Select(t => allowRotate && m.Items[m.TabletItem[t]].Rotatable).ToArray();
 
         long evals = 0;
-        int chains = maxChains > 0 ? maxChains : Math.Max(1, Math.Min(4, Environment.ProcessorCount / 2));
+        int chains = maxChains > 0 ? maxChains : WorkerThreads;
         var bestPerms = new int[chains][];
         var bestRots = new int[chains][];
         var bestScores = new double[chains];
         double budget = Math.Max(0.2, budgetSeconds - clock.Elapsed.TotalSeconds);
 
-        Parallel.For(0, chains, c =>
+        Parallel.For(0, chains, c => LowPriority(() =>
         {
             var ev = new Evaluator(m);
             var rng = new System.Random(seed + c * 7919);
@@ -217,7 +217,7 @@ public partial class SephiriaToolbox
             bestRots[c] = br;
             bestScores[c] = best;
             Interlocked.Add(ref evals, local);
-        });
+        }));
 
         int win = Array.IndexOf(bestScores, bestScores.Max());
         var bestPerm = bestPerms[win];

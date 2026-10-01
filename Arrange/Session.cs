@@ -83,7 +83,7 @@ public partial class SephiriaToolbox
         arrMessage = Tr("arrange.calculating_background_about_s", budgetSeconds);
         bool rotate = settings.arrRotate;
         int seed = Environment.TickCount;
-        arrTask = Task.Run(() =>
+        arrTask = Task.Run(() => LowPriority(() =>
         {
             var r = Optimize(model, rotate, budgetSeconds, seed);
             if (r != null && model.Dps != null)
@@ -92,7 +92,7 @@ public partial class SephiriaToolbox
                 catch (Exception e) { Debug.LogWarning("[SephiriaToolbox] 神器价值：" + e); }
             }
             return r;
-        });
+        }));
     }
 
     void UpdateArrange()
@@ -125,11 +125,11 @@ public partial class SephiriaToolbox
             int seed = Environment.TickCount, gen = arrGeneration;
             engraveTotal = m.TabletItem.Length;
             engraveProgress = 0;
-            engraveTask = Task.Run(() =>
+            engraveTask = Task.Run(() => LowPriority(() =>
             {
                 var result = AnalyzeEngraving(m, r, rotate, per, seed, i => { engraveProgress = i; return gen == arrGeneration; });
                 return gen == arrGeneration ? result : null;
-            });
+            }));
         }
 
         int levelDiff = 0, stateDiff = 0;

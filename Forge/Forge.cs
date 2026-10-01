@@ -120,7 +120,7 @@ public partial class SephiriaToolbox
         forgeProgress = 0;
         bool rotate = settings.arrRotate;
         int seed = Environment.TickCount, gen = ++forgeGeneration;
-        forgeTask = Task.Run(() =>
+        forgeTask = Task.Run(() => LowPriority(() =>
         {
             double Best(ArrModel m)
             {
@@ -137,7 +137,7 @@ public partial class SephiriaToolbox
                 o.Model = null;
                 forgeProgress++;
             }
-        });
+        }));
     }
 
     ArrModel BuildForgeModel(PlayerAvatar avatar, WeaponSimple ws, Dictionary<string, int> delta, HashSet<string> ids, out string error)

@@ -37,7 +37,9 @@ public partial class SephiriaToolbox
     float nextSettingsSave;
     static string SettingsPath => System.IO.Path.Combine(LogDir, "settings.json");
 
-    void SaveSettings()
+    void SaveSettings() => SaveSettings(sync: false);
+
+    void SaveSettings(bool sync)
     {
         settingsDirty = false;
         try
@@ -45,10 +47,22 @@ public partial class SephiriaToolbox
             settings.x = windowRect.x;
             settings.y = windowRect.y;
             settings.tab = tab;
-            System.IO.Directory.CreateDirectory(LogDir);
-            System.IO.File.WriteAllText(SettingsPath, Newtonsoft.Json.JsonConvert.SerializeObject(settings, Newtonsoft.Json.Formatting.Indented));
+            string json = Newtonsoft.Json.JsonConvert.SerializeObject(settings, Newtonsoft.Json.Formatting.Indented);
+            if (sync)
+            {
+                System.IO.Directory.CreateDirectory(LogDir);
+                System.IO.File.WriteAllText(SettingsPath, json);
+            }
+            else WriteFileInBackground(SettingsPath, () => json);
         }
         catch (Exception e) { WarnOnce("保存界面设置", e); }
+    }
+
+    void SettingsChangedLater()
+    {
+        if (settingsDirty) return;
+        settingsDirty = true;
+        nextSettingsSave = Time.unscaledTime + 30f;
     }
 
     void SaveSettingsIfDirty()
