@@ -106,7 +106,7 @@ public partial class SephiriaToolbox
         else if (weapon is WeaponSimple_Crossbow xbw) BuildCrossbowModel(avatar, d, K, xbw, play, m);
         else if (weapon is WeaponSimple_Katana ktw) BuildKatanaSweep(avatar, d, K, ktw, play, m);
         else if (weapon is WeaponSimple_QuartterStaff qsw) BuildQuarterStaffModel(avatar, d, K, qsw, play, m);
-        buildWeaponHits = Math.Max(0.2, play.Swing * AttackSpeedFactor(avatar.GetCustomStat(ECustomStat.AttackSpeed), weapon != null ? WeaponAsAmp(weapon) : 0)
+        buildWeaponHits = Math.Max(0.2, play.Swing * play.SwingHit * AttackSpeedFactor(avatar.GetCustomStat(ECustomStat.AttackSpeed), weapon != null ? WeaponAsAmp(weapon) : 0)
                                         + play.Special + play.DashAttack + play.Strike);
         bool guards = weapon is WeaponSimple_SwordAndShield or WeaponSimple_QuartterStaff;
         d.GuardRate = guards ? play.Guard : 0;
@@ -256,7 +256,7 @@ public partial class SephiriaToolbox
                 var s = new DpsSource
                 {
                     Kind = SrcKind.Rider, Name = Tr("src.weapon_spikes"), ElemIdx = 0, AddBase = g.NeedleRatio * 100 * g.NeedleCount * g.NeedleHit, PerCrit = true,
-                    Prior = play.Swing, TheoryK = (play.Swing + play.Special + play.DashAttack) * play.HitsPerSwing, HasTheory = true,
+                    Prior = play.Swing, TheoryK = (play.Swing * play.SwingHit + play.Special + play.DashAttack) * play.HitsPerSwing, HasTheory = true,
                     Note = Tr("model.fires_spikes_direct_attack"), DmgElem = 0, MultiScale = play.HitsPerSwingM / Math.Max(1e-6, play.HitsPerSwing)
                 };
                 s.Ids.Add("Weapon_Spike");
@@ -274,7 +274,7 @@ public partial class SephiriaToolbox
                         Kind = SrcKind.Rider, Name = Tr("src.weapon", TrimPrefix(DamageIdName(ad.damageId), "武器")),
                         ElemIdx = e, StatKey = e < 0 ? K(stat) : -1,
                         AddKey = K("ADDITIONALELEMENTALDAMAGEBONUS"), AddBase = ad.additionalDamagePercent,
-                        Prior = play.Swing, TheoryK = (play.Swing + play.Special + play.DashAttack + play.Strike) * play.HitsPerSwing, HasTheory = true, Note = Tr("model.added_every_weapon_hit"),
+                        Prior = play.Swing, TheoryK = (play.Swing * play.SwingHit + play.Special + play.DashAttack + play.Strike) * play.HitsPerSwing, HasTheory = true, Note = Tr("model.added_every_weapon_hit"),
                         DmgElem = ElemIndex(ad.elementalType), MultiScale = play.HitsPerSwingM / Math.Max(1e-6, play.HitsPerSwing)
                     };
                     s.Ids.Add(ad.damageId);
@@ -316,7 +316,7 @@ public partial class SephiriaToolbox
                         Default = ReadFloats(skill, "defaultDamageByLevel"),
                         Percent = ReadFloats(skill, "damagePercentByLevel"),
                         RelKey = ReadString(skill, "relatedDamage")?.ToUpperInvariant(),
-                        Cooldown = Math.Max(0.1, entity.cooldownTime),
+                        Cooldown = Math.Max(0.1, entity.cooldownTime), Ammo = Math.Max(1, entity.ammo),
                         Prior = 1, TheoryK = 1, HasTheory = true,
                         Note = Tr("model.cooldown_s", entity.cooldownTime)
                     };
@@ -505,7 +505,7 @@ public partial class SephiriaToolbox
                     if (s.Ids.Contains("FlameGround")) s.Note = Tr("model.blazing_field_2_50");
                     if (s.Ids.Contains("Ability_FlameSword"))
                     {
-                        double direct = play.Swing + play.Special + play.DashAttack + play.Strike;
+                        double direct = play.Swing * play.SwingHit + play.Special + play.DashAttack + play.Strike;
                         s.TheoryK = Math.Min(direct * play.HitsPerSwing + 0.3, 1 / 0.15) * 1.5;
                         s.MultiScale = Math.Min(direct * play.HitsPerSwingM + 0.3, 1 / 0.15) * 1.5 / Math.Max(1e-6, s.TheoryK);
                         s.HasTheory = true;

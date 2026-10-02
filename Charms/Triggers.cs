@@ -87,8 +87,8 @@ public partial class SephiriaToolbox
         double BaseRate(double hps, double kill) => mech.Trig switch
         {
             Trig.Swing => basicSwing,
-            Trig.BasicHit => basicSwing * hps,
-            Trig.DirectHit => (swing + b.Special + b.DashAttack) * hps,
+            Trig.BasicHit => basicSwing * b.SwingHit * hps,
+            Trig.DirectHit => (swing * b.SwingHit + b.Special + b.DashAttack) * hps,
             Trig.DirectOrMagic => (swing + b.Special + b.DashAttack) * hps + 0.3,
             Trig.Special => b.Special,
             Trig.Dash => PlayDash,

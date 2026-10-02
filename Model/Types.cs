@@ -26,6 +26,7 @@ public partial class SephiriaToolbox
         public string RelKey;
         public float[] Table;
         public double Cooldown = 10;
+        public int Ammo = 1;
         public bool Column;
         public readonly HashSet<string> Ids = new();
         public double Measured, K, Weight;

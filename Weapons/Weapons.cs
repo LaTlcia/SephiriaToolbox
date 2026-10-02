@@ -22,6 +22,7 @@ public partial class SephiriaToolbox
         public double BloodyFuryPct;
         public bool CloudBottle;
         public double CloudBottlePct = 70;
+        public double BoltSwing;
         public bool SpecialMp, BasicMp;
         public bool Melee;
         public int kRange = -1;

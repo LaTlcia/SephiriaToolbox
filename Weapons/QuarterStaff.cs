@@ -26,7 +26,7 @@ public partial class SephiriaToolbox
         if (qs.isNormalAttackRolling && qs.rollingFireData != null)
         {
             mv.BasicFd = qs.rollingFireData;
-            mv.BasicMult = HitMult(qs.rollingFireData);
+            mv.BasicMult = RandomBoltAttack(qs.rollingFireData) ? 0 : HitMult(qs.rollingFireData);
         }
         else
         {
@@ -62,6 +62,9 @@ public partial class SephiriaToolbox
         return mv;
     }
 
+    static bool RandomBoltAttack(NewWeaponFireData fd) =>
+        fd is NewWeaponFireData_SpecialProjectile sp && sp.projectilePrefab != null && sp.projectilePrefab.GetComponent<SpecialProjectile_RandomBolt>() != null;
+
     static bool HasFlameSpear(WeaponSimple_QuartterStaff qs) =>
         qs.addons != null && qs.addons.OfType<WeaponAddonCommon_ChangeWeaponAction>()
           .Any(a => a != null && string.Equals(a.changeWeaponActionName, "SPECIALATTACK", StringComparison.OrdinalIgnoreCase)
@@ -74,6 +77,12 @@ public partial class SephiriaToolbox
         if (q.FollowerBasic) m.Notes.Add(Tr("weapon.sacred_jar_normal_attack"));
         if (qs.isNormalAttackRolling && !play.SwingMeasured)
             play.Swing = 1 / Math.Max(0.05, qs.attackWeightPerSwing);
+        if (qs.isNormalAttackRolling && RandomBoltAttack(qs.rollingFireData))
+        {
+            play.SwingHit = 0;
+            d.Weapon.BoltSwing = play.Swing;
+            m.Notes.Add(Tr("weapon.bolt_barrage", play.Swing * AttackSpeedFactor(avatar.GetCustomStat(ECustomStat.AttackSpeed), 0)));
+        }
         var mv = QuarterStaffMoves(qs, play);
         if (qs.isCrystalExplosion && qs.crystalExplosionFireData != null)
         {

@@ -103,12 +103,43 @@ public partial class SephiriaToolbox
             double cdr = T(d.kCdr), L = FightLen();
             bool blocked = d.kBlockMagic >= 0 && T(d.kBlockMagic) > 0;
             double k = FinalComboCdr();
+            double swings = d.Weapon.BoltSwing > 0 ? d.Weapon.BoltSwing * StatAs() : 0, supply = 0;
+            int books = 0;
             foreach (var s in d.Sources)
                 if (s.Kind == SrcKind.Magic)
                 {
-                    double manual = blocked ? 0 : CdRate(Pct(cdr + extraCdr[s.Item]) / s.Cooldown, k) + (L > 0 ? 1 / L : 0);
-                    magicRate[s.Item] = ItemOn[s.Item] ? manual + autoRate[s.Item] : 0;
+                    int i = s.Item;
+                    double regen = CdRate(Pct(cdr + extraCdr[i]) / s.Cooldown, k);
+                    bool bolt = swings > 0 && d.Extra[i].BoltMagic && ItemOn[i];
+                    manualRate[i] = blocked || bolt || !ItemOn[i] ? 0 : regen + (L > 0 ? 1 / L : 0);
+                    boltRate[i] = bolt ? regen + (L > 0 ? s.Ammo / L : 0) : 0;
+                    boltSet[i] = !bolt;
+                    if (bolt) { supply += boltRate[i]; books++; }
                 }
+            if (books > 0 && swings < supply)
+            {
+                double left = swings;
+                bool changed = true;
+                while (changed && books > 0)
+                {
+                    changed = false;
+                    double share = left / books;
+                    foreach (var s in d.Sources)
+                    {
+                        if (s.Kind != SrcKind.Magic || boltSet[s.Item] || boltRate[s.Item] > share) continue;
+                        boltSet[s.Item] = true;
+                        left -= boltRate[s.Item];
+                        books--;
+                        changed = true;
+                    }
+                }
+                double even = books > 0 ? Math.Max(0, left) / books : 0;
+                foreach (var s in d.Sources)
+                    if (s.Kind == SrcKind.Magic && !boltSet[s.Item]) boltRate[s.Item] = even;
+            }
+            foreach (var s in d.Sources)
+                if (s.Kind == SrcKind.Magic)
+                    magicRate[s.Item] = ItemOn[s.Item] ? manualRate[s.Item] + autoRate[s.Item] + boltRate[s.Item] : 0;
         }
 
         static double CdRate(double r0, double k) => k > 1e-9 && r0 > 1e-9 ? k / Math.Log(1 + k / r0) : r0;

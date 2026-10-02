@@ -27,7 +27,7 @@ public partial class SephiriaToolbox
             foreach (var s in d.Sources)
             {
                 if (s.Kind != SrcKind.Magic || s.Item < 0 || !ItemOn[s.Item] || (s.MagicCost == null && s.MagicCostBase == null)) continue;
-                double casts = magicRate[s.Item] * multi;
+                double casts = manualRate[s.Item] * multi;
                 double cost = MagicCostNow(s, IdxOf(s.Item));
                 if (cost <= 0) continue;
                 mp += casts * cost;

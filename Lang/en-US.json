@@ -383,6 +383,7 @@
  "weapon.attack_buff_s_weapon": "On-attack buff: {0:0.#} s{1}; at {2:0.0} weapon hits/s, {3:0.##} average stacks",
  "weapon.barnacle_hits_attach_c4": "The Barnacle: hits attach C4 (up to {0:0} per target) and the Special Attack detonates them; each deals {1:0} + {2:0}% Physical ATK, +1% per {3:0} defense",
  "weapon.block_ice_spike": "Block ice spike",
+ "weapon.bolt_barrage": "Bolt Barrage: about {0:0.0} Normal Attacks/s, each casting a bolt book that has ammo (no MP; also gains Normal Attack damage%)",
  "weapon.cap": ", at cap",
  "weapon.cleave_button_performs_flame": "The Cleave button performs Flame Strike (a Normal Attack, no MP), detonating consumed Burns",
  "weapon.cleave_empowered_5_s": "Cleave (empowered for 5 s after a block, about {0:P0})",

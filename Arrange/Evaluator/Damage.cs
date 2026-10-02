@@ -214,8 +214,9 @@ public partial class SephiriaToolbox
                     var rate = RateOf(s);
                     double hits = (rate != null ? SafeAt(rate, idx) : 1) * MultiCast();
                     if (d.Extra[s.Item].BoltMagic) hits *= boltFactor;
-                    double mp = Pct(T(d.kMpSkill)) * (1 + MagicCostNow(s, idx) / 10.0 * T(d.kMagicMp) / 100.0);
-                    return baseDmg * hits * mp * (1 + (boost[s.Item] + CharmBonus()) / 100.0) * Pct(T(d.kMdb)) * all * Pct(ModMul(s)) * magicRate[s.Item]
+                    double casts = manualRate[s.Item] * (1 + MagicCostNow(s, idx) / 10.0 * T(d.kMagicMp) / 100.0)
+                                 + autoRate[s.Item] + boltRate[s.Item] * Pct(T(d.kBad));
+                    return baseDmg * hits * Pct(T(d.kMpSkill)) * (1 + (boost[s.Item] + CharmBonus()) / 100.0) * Pct(T(d.kMdb)) * all * Pct(ModMul(s)) * casts
                          * CF(crit + T(d.kMCrit) / 100.0 + ModCrit(s), critDmg + T(d.kMCritDmg) + ModCritDmg(s), exec);
                 }
                 case SrcKind.Rider:

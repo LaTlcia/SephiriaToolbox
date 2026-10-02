@@ -33,6 +33,8 @@ public partial class SephiriaToolbox
         readonly int[][] wpCats;
         readonly int[] wpCatN;
         readonly double[] extraCdr, autoRate, boost, magicRate, costRed;
+        readonly double[] manualRate, boltRate;
+        readonly bool[] boltSet;
         readonly bool[] enhanced;
         readonly bool[] arrFast, arrWide;
         readonly int[] patItem = new int[8], patEntry = new int[8];
@@ -60,6 +62,7 @@ public partial class SephiriaToolbox
                 wpCats = new int[n][]; wpCatN = new int[n];
                 foreach (var sp in d.Specials) if (sp.Kind == SpecialKind.WhitePaper) wpCats[sp.Item] = new int[8];
                 extraCdr = new double[n]; autoRate = new double[n]; boost = new double[n]; magicRate = new double[n]; costRed = new double[n];
+                manualRate = new double[n]; boltRate = new double[n]; boltSet = new bool[n];
                 enhanced = new bool[n];
                 arrFast = new bool[n]; arrWide = new bool[n];
             }

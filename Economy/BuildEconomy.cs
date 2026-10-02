@@ -12,7 +12,7 @@ public partial class SephiriaToolbox
         var e = d.Eco = new EcoModel { Battle = play.Single && d.FightLen > 0 ? d.FightLen : BattleLength(), Enemies = play.EnemiesM };
         var weapon = ModelWeapon(avatar);
         bool melee = weapon == null || !(weapon.weaponType is EWeaponType.Crossbow or EWeaponType.StaffMagic or EWeaponType.Golem);
-        double swingHits = play.Swing * play.HitsPerSwing;
+        double swingHits = play.Swing * play.SwingHit * play.HitsPerSwing;
         double otherHits = (play.Special + play.DashAttack + play.Strike) * play.HitsPerSwing;
         double asNow = AttackSpeedFactor(avatar.GetCustomStat(ECustomStat.AttackSpeed), WeaponAsAmp(weapon));
         double combatSec = runCombatTime;
@@ -351,8 +351,9 @@ public partial class SephiriaToolbox
     void EstimateTriggers(PlayerAvatar avatar, WeaponSimple weapon, Charm_Basic[] charmOf, Behavior play)
     {
         double cdr = Pct(avatar.GetCustomStat(ECustomStat.CooldownRecoverySpeed));
+        bool manual = StatWithWeapon(avatar, "BLOCKCASTMAGIC", weapon) <= 0;
         foreach (var c in charmOf)
-            if (c is Charm_Magic cm && cm.IsEffectEnabled && cm.ContainedMagic != null && cm.ContainedMagic.cooldownTime > 0)
+            if (manual && c is Charm_Magic cm && cm.IsEffectEnabled && cm.ContainedMagic != null && cm.ContainedMagic.cooldownTime > 0)
             {
                 int cost = 0;
                 try { cost = cm.GetCost(avatar, cm.CurrentLevelToIdx()); } catch { }
@@ -360,7 +361,7 @@ public partial class SephiriaToolbox
             }
         if (play.SpecialByMp) play.MpPerSec += play.Special * Math.Max(0, play.SweepCost);
         double asf = AttackSpeedFactor(avatar.GetCustomStat(ECustomStat.AttackSpeed), WeaponAsAmp(weapon));
-        double hits = (play.Swing * asf + play.Special + play.DashAttack + play.Strike) * play.HitsPerSwing;
+        double hits = (play.Swing * play.SwingHit * asf + play.Special + play.DashAttack + play.Strike) * play.HitsPerSwing;
         bool phys = weapon != null && weapon.basicComboAttacks != null
                     && weapon.basicComboAttacks.Any(a => a != null && a.damageElementalType == EDamageElementalType.Physical);
         double crit = Math.Min(1, Math.Max(0, (avatar.GetCustomStat(ECustomStat.Critical) + avatar.GetCustomStatUnsafe("WEAPONCRITICAL")) / 10000.0));

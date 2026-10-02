@@ -12,8 +12,8 @@ public partial class SephiriaToolbox
         d.kPlasma = K("PLASMAACTIVE"); d.kPlasmaDmg = K("PLASMADAMAGE"); d.kDebuffDur = K("DEBUFFDURATION");
         var weapon = ModelWeapon(avatar);
         var hm = d.Hits;
-        hm.Swing = play.Swing * play.HitsPerSwing;
-        hm.SwingM = play.Swing * play.HitsPerSwingM;
+        hm.Swing = play.Swing * play.SwingHit * play.HitsPerSwing;
+        hm.SwingM = play.Swing * play.SwingHit * play.HitsPerSwingM;
         hm.Special = play.Special * play.HitsPerSwing;
         hm.SpecialM = play.Special * play.HitsPerSwingM;
         hm.Other = (play.Special + play.DashAttack + play.Strike) * play.HitsPerSwing;

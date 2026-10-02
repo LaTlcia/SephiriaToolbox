@@ -34,6 +34,7 @@ public partial class SephiriaToolbox
         public bool Single;
         public double Enemies = PlayEnemies;
         public double HitsPerSwing = 1;
+        public double SwingHit = 1;
         public double EnemiesM = PlayEnemies, HitsPerSwingM = 1;
         public double Kill => Single ? PlayKillBoss : PlayKill;
         public double Special = PlaySpecial;
