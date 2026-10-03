@@ -155,7 +155,7 @@ public partial class SephiriaToolbox
             if (g == null) return 1;
             var w = d.Weapon;
             double add = g.PassFury;
-            if (w.kBloodyFury >= 0 && T(w.kBloodyFury) > 0) add += w.BloodyFuryPct;
+            if (w.kBloodyFury >= 0 && T(w.kBloodyFury) > 0) add += Math.Floor(MaxHpNow() / w.BloodyFuryHp);
             if (w.kCloudParry >= 0 && T(w.kCloudParry) > 0 && d.Eco != null && d.Sources.Any(x => x.Eco == EcoKind.DarkCloud))
             {
                 var e = d.Eco;

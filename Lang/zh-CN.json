@@ -391,6 +391,7 @@
  "weapon.attack_buff_s_weapon": "武器攻击时的 Buff：{0:0.#} 秒{1}，按每秒武器命中 {2:0.0} 次平均 {3:0.##} 层",
  "weapon.barnacle_hits_attach_c4": "藤壶：命中挂 C4（每个目标最多 {0:0} 个），特攻引爆，每个 {1:0} + 物攻 × {2:0}%，每 {3:0} 点防御 +1%",
  "weapon.block_ice_spike": "格挡冰刺",
+ "weapon.bloodletting": "放血：生命上限 {0:0}，变身时全部伤害 +{1:0}%、普攻 +{2:0}%（变身时生命为上限的 {3:0}%{4}）",
  "weapon.bolt_barrage": "魔弹连射：普攻每秒约 {0:0.0} 下，每下替你放一本有弹药的魔弹书（不耗蓝，另吃普攻伤害%）",
  "weapon.cap": "，按上限",
  "weapon.cleave_button_performs_flame": "横扫键出火焰强击（普攻，不耗蓝），引爆吞掉的灼伤",

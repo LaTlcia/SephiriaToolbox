@@ -22,7 +22,9 @@ public partial class SephiriaToolbox
             Cooldown = c.coolDownTimer != null && c.coolDownTimer.time > 0 ? c.coolDownTimer.time : 30
         }));
 
-        PassiveDefs["Charm_CarrotCharm"] = P(new PassiveDef { Kind = PKind.Stat, Key = MaxMpKey, By = "addMpByLevel" });
+        PassiveDefs["Charm_CarrotCharm"] = P(
+            new PassiveDef { Kind = PKind.Stat, Key = MaxMpKey, By = "addMpByLevel" },
+            new PassiveDef { Kind = PKind.Stat, Key = MaxHpKey, By = "addHpByLevel" });
 
         PassiveDefs["Charm_IncreaseMP"] = P(new PassiveDef { Kind = PKind.Stat, Key = MaxMpKey, By = "addMPByLevel" });
 

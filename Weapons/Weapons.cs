@@ -21,7 +21,7 @@ public partial class SephiriaToolbox
                       DefKatanaUnit = 2, DefKatanaPct = 1, SheathRangePer = 1;
         public bool Dagger;
         public int kBloodyFury = -1, kCloudParry = -1;
-        public double BloodyFuryPct;
+        public double BloodyFuryHp = 2;
         public bool CloudBottle;
         public double CloudBottlePct = 70;
         public double BoltSwing;
@@ -114,7 +114,7 @@ public partial class SephiriaToolbox
                 w.Dagger = true;
                 w.kBloodyFury = K("BLOODYFURY");
                 w.kCloudParry = K("DARKCLOUDPARRY");
-                w.BloodyFuryPct = Math.Floor(avatar.MaxHp / Math.Max(1, ConstOr("daggerBloodyFuryHP", 2)));
+                w.BloodyFuryHp = Math.Max(1, ConstOr("daggerBloodyFuryHP", 2));
                 BuildDaggerModel(avatar, d, K, dagger, play);
                 break;
             case WeaponSimple_QuartterStaff qs:
@@ -236,7 +236,7 @@ public partial class SephiriaToolbox
             {
                 if (s.Kind == SrcKind.WeaponSpecial) v *= GsSpecialFactor();
                 else if (s.Kind == SrcKind.WeaponBasic)
-                    v *= GsBasicFactor(ElemFor(s.Formula, s.Element, elem) * Pct(T(d.kWdb)) * Pct(T(d.kBad)) * Pct(T(d.kFwd)));
+                    v *= GsBasicFactor(s, ElemFor(s.Formula, s.Element, elem) * Pct(T(d.kWdb)) * Pct(T(d.kBad)) * Pct(T(d.kFwd)));
             }
             if (w.Melee && w.kRange >= 0) v *= Math.Min(Single ? w.HitsCap : w.HitsCapM, RangeHits(T(w.kRange)) / w.RangeNow);
             if (w.Crossbow && s.Kind == SrcKind.WeaponBasic)

@@ -47,6 +47,11 @@ public partial class SephiriaToolbox
         try { if (avatar.NetworkcurrentCostumeEquipEffect is CostumeEquipEffect_Skeleton sk && sk.addDamage != 0) { d.ConstMul = 1 + sk.addDamage / 100.0; m.Notes.Add(Tr("model.costume_all_damage", sk.addDamage)); } }
         catch (Exception e) { WarnOnce("服装效果", e); }
         d.ExtraBase[d.kMaxMp] = avatar.maxMp;
+        d.kMaxHp = K(MaxHpKey); d.kFinalHp = K(FinalHpKey);
+        d.ExtraBase[d.kMaxHp] = avatar.maxHp;
+        d.ExtraBase[d.kFinalHp] = avatar.finalMaxHp;
+        try { double fixedHp = UncappedMaxHp(avatar, out bool cursed); d.HpCurse = cursed ? fixedHp : -1; }
+        catch (Exception e) { WarnOnce("生命上限", e); }
         try { d.DefaultMp = KeywordDatabase.GetConstValue("PLAYERDEFAULTMP"); } catch { }
         try
         {

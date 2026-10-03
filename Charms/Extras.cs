@@ -200,5 +200,12 @@ public partial class SephiriaToolbox
         }
 
         double MaxMp() => d.kMaxMp >= 0 ? T(d.kMaxMp) * Pct(d.kFinalMp >= 0 ? T(d.kFinalMp) : 0) : 0;
+
+        double MaxHpNow()
+        {
+            if (d.HpCurse >= 0) return d.HpCurse;
+            if (d.kMaxHp < 0) return 0;
+            return Math.Max(0, raw[d.kMaxHp] * (1 + (d.kFinalHp >= 0 ? raw[d.kFinalHp] : 0) / 100.0));
+        }
     }
 }

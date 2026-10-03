@@ -21,7 +21,9 @@ public partial class SephiriaToolbox
         public double TransformTime = 8, TransMult = 1, ComboMult = 1, TransAs, TransFlat, TransDefRatio;
         public int kTransDef = -1;
         public bool Blood;
-        public double BloodAllDmg, BloodBasicPct;
+        public double BloodCap = 50, BloodPerStack = 1;
+        public double BloodHpUnit = 10, BloodBasicPer = 2;
+        public double BloodHpShare = 0.9;
         public bool Needle;
         public double NeedleCount = 3, NeedleRatio = 0.26, NeedleHit = 0.5;
     }
@@ -129,13 +131,12 @@ public partial class SephiriaToolbox
             var bb = gs.addons?.OfType<WeaponAddonGreatsword_BoneBlood>().FirstOrDefault(x => x != null);
             if (bb != null)
             {
-                double maxHp = Math.Max(0, avatar.MaxHp);
                 g.Blood = true;
-                g.BloodAllDmg = Math.Max(0, Math.Floor(maxHp * 0.9) - bb.transformedMaxHp) * bb.damagePerBloodStack;
-                g.BloodBasicPct = bb.maxHpPerBonusAmount > 0 ? Math.Floor(Math.Max(0, maxHp - bb.transformedMaxHp) / bb.maxHpPerBonusAmount) * bb.basicAttackBonusPerAmount : 0;
-                double share = Math.Min(1, play.Transform * g.TransformTime * Pct(avatar.GetCustomStat(ECustomStat.BuffDuration)));
-                int kAll = K("ALLDAMAGEBONUS");
-                d.ExtraBase[kAll] = d.ExtraBase.GetValueOrDefault(kAll) + g.BloodAllDmg * share;
+                g.BloodCap = Math.Max(0, bb.transformedMaxHp);
+                g.BloodPerStack = bb.damagePerBloodStack;
+                g.BloodHpUnit = bb.maxHpPerBonusAmount;
+                g.BloodBasicPer = bb.basicAttackBonusPerAmount;
+                g.BloodHpShare = BloodShare(out _);
             }
         }
         var needle = gs.addons?.OfType<WeaponAddonGreatsword_FireNeedleBullet>().FirstOrDefault(x => x != null);
@@ -204,6 +205,14 @@ public partial class SephiriaToolbox
             play.Transform = play.Special;
             play.Special = 0;
             play.SpecialMeasured = false;
+            var bb = gs.addons?.OfType<WeaponAddonGreatsword_BoneBlood>().FirstOrDefault(x => x != null);
+            if (bb != null)
+            {
+                double max = UncappedMaxHp(avatar, out _), kept = Math.Min(Math.Floor(max), bb.transformedMaxHp), share = BloodShare(out bool measured);
+                double stacks = Math.Max(0, Math.Floor(max * share) - kept);
+                double basic = bb.maxHpPerBonusAmount > 0 ? Math.Floor(Math.Max(0, Math.Floor(max) - kept) / bb.maxHpPerBonusAmount) * bb.basicAttackBonusPerAmount : 0;
+                m.Notes.Add(Tr("weapon.bloodletting", max, stacks * bb.damagePerBloodStack, basic, share * 100, measured ? Tr("weapon.measured") : ""));
+            }
         }
     }
 
@@ -219,10 +228,15 @@ public partial class SephiriaToolbox
                     curRaw[k] = curRaw.GetValueOrDefault(k) + fast.addedAttackSpeed;
                     break;
                 }
-                case WeaponAddonGreatsword_BoneBlood bb when FieldValue(bb, "appliedDamageBonus") is int applied && applied != 0:
+                case WeaponAddonGreatsword_BoneBlood bb:
                 {
-                    int k = K("ALLDAMAGEBONUS");
-                    curRaw[k] = curRaw.GetValueOrDefault(k) + applied;
+                    int applied = FieldValue(bb, "appliedDamageBonus") is int v ? v : 0;
+                    if (applied == 0 && !Mirror.NetworkServer.active && live.isTransformed) applied = BloodLiveStack(avatar, bb) * bb.damagePerBloodStack;
+                    if (applied != 0)
+                    {
+                        int k = K("ALLDAMAGEBONUS");
+                        curRaw[k] = curRaw.GetValueOrDefault(k) + applied;
+                    }
                     break;
                 }
             }
@@ -299,7 +313,29 @@ public partial class SephiriaToolbox
             return Math.Min(1, GsSpecialRate() * g.TransformTime * Pct(T(d.kBuffDur)));
         }
 
-        double GsBasicFactor(double hitDamage)
+        double GsBloodStacks()
+        {
+            var g = d.Weapon.Gs;
+            if (g == null || !g.Blood) return 0;
+            double max = MaxHpNow(), kept = Math.Min(Math.Floor(max), g.BloodCap);
+            return Math.Max(0, Math.Floor(max * g.BloodHpShare) - kept);
+        }
+
+        double GsBloodAll()
+        {
+            var g = d.Weapon.Gs;
+            return g != null && g.Blood ? GsBloodStacks() * g.BloodPerStack : 0;
+        }
+
+        double GsBloodBasicPct()
+        {
+            var g = d.Weapon.Gs;
+            if (g == null || !g.Blood || g.BloodHpUnit <= 0) return 0;
+            double max = Math.Floor(MaxHpNow()), kept = Math.Min(max, g.BloodCap);
+            return Math.Floor(Math.Max(0, max - kept) / g.BloodHpUnit) * g.BloodBasicPer;
+        }
+
+        double GsBasicFactor(DpsSource s, double hitDamage)
         {
             var g = d.Weapon.Gs;
             if (g == null || !g.Transform) return 1;
@@ -309,8 +345,11 @@ public partial class SephiriaToolbox
             double trans = g.TransMult / g.ComboMult * (asTrans / asNow) * Pct(T(d.kMpSkill));
             if (g.TransFlat > 0 && hitDamage > 0)
                 trans *= 1 + (g.TransFlat + Math.Max(0, T(g.kTransDef)) * g.TransDefRatio) / (hitDamage * g.TransMult);
-            if (g.Blood) trans *= Pct(g.BloodBasicPct);
-            return (1 - share) + share * trans;
+            if (!g.Blood) return (1 - share) + share * trans;
+            trans *= Pct(GsBloodBasicPct());
+            double a0 = AllPct(s), blood = GsBloodAll(), avg = Pct(a0 + share * blood);
+            if (avg <= 1e-9) return (1 - share) + share * trans;
+            return ((1 - share) * Pct(a0) + share * trans * Pct(a0 + blood)) / avg;
         }
 
         double GsCritAdd(DpsSource s)

@@ -208,6 +208,8 @@ public partial class SephiriaToolbox
         public double Realization = 1;
         public string SwingInfo = "";
         public int kFinalCrit = -1, kFinalDmg = -1, kDashDmg = -1, kMaxMp = -1, kFinalMp = -1;
+        public int kMaxHp = -1, kFinalHp = -1;
+        public double HpCurse = -1;
         public int kWdbDash = -1, kDashCount = -1, kElite = -1, kGoldHand = -1, kGoldHandUnl = -1, kDefToAtk = -1, kDef = -1,
                    kDebuff = -1, kPoison = -1, kFollowerDmg = -1, kFollowerCrit = -1, kFollowerCritContrib = -1, kBlockMagic = -1;
         public double GoldHandPct, GoldHandPctUnl;

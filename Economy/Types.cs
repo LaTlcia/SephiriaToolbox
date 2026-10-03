@@ -52,6 +52,7 @@ public partial class SephiriaToolbox
     const double EliteShare = 0.3;
     const double DotTargetShare = 0.6;
 
+    const string MaxHpKey = "__MAXHP", FinalHpKey = "__FINALHP";
     const string MaxMpKey = "__MAXMP", FinalCritKey = "__FINALCOMBOCRITICAL", FinalDmgKey = "__FINALCOMBODAMAGE", DashDmgKey = "__DASHATTACKDAMAGE",
                  GroundDurKey = "__FLAMEGROUNDDURATION", GroundRangeKey = "__FLAMEGROUNDRANGE",
                  MoveSpeedKey = "__MOVESPEED";

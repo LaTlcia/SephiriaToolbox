@@ -7,6 +7,8 @@ public partial class SephiriaToolbox
 {
     static void RegisterMystic()
     {
+        PassiveDefs["Charm_IncreaseHP"] = P(new PassiveDef { Kind = PKind.Stat, Key = MaxHpKey, By = "addHPByLevel" });
+
         PassiveDefs["Charm_FirstAttackBonusDamage"] = P(new PassiveDef { Kind = PKind.Mul, By = "damageBonusByLevel", Uptime = UpFirstHit, Factor = (c, a) => buildSingle ? 0.1 : 1, OwnOnly = true });
 
         PassiveDefs["Charm_IncreaseAllDamageByHP"] = P(new PassiveDef { Kind = PKind.Stat, Key = "ALLDAMAGEBONUS", By = "damagePercentByLevel", Uptime = UpFullHp, Cur = "enabledValue" });

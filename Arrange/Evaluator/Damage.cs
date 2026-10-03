@@ -44,13 +44,9 @@ public partial class SephiriaToolbox
 
         double AllFactor(DpsSource s)
         {
-            double a = T(d.kAll) + T(d.kElite) * (Single ? 1 : EliteShare) + UnlimitedCombo();
-            if (s.Direct) a += T(d.kWdbDash) * T(d.kDashCount);
-            if (s.Summon)
-            {
-                a += T(d.kFollowerDmg);
-                if (T(d.kAdvNego) >= 1) a += T(d.kNego);
-            }
+            double a = AllPct(s);
+            var gs = d.Weapon.Gs;
+            if (gs != null && gs.Blood) a += GsBloodAll() * GsTransformShare();
             double v = Pct(a) * DefenseFactor(s) * d.ConstMul;
             if (T(d.kGoldHand) > 0) v *= 1 + (T(d.kGoldHandUnl) > 0 ? d.GoldHandPctUnl : d.GoldHandPct) / 100.0;
             if (T(d.kDefToAtk) > 0)
@@ -59,6 +55,18 @@ public partial class SephiriaToolbox
                 v *= 1 + (def > 0 ? Math.Log(def / 40.0 + 1) * 0.445 : def / 100.0);
             }
             return v;
+        }
+
+        double AllPct(DpsSource s)
+        {
+            double a = T(d.kAll) + T(d.kElite) * (Single ? 1 : EliteShare) + UnlimitedCombo();
+            if (s.Direct) a += T(d.kWdbDash) * T(d.kDashCount);
+            if (s.Summon)
+            {
+                a += T(d.kFollowerDmg);
+                if (T(d.kAdvNego) >= 1) a += T(d.kNego);
+            }
+            return a;
         }
 
         double UnlimitedCombo()
