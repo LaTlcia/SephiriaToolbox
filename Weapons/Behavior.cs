@@ -10,16 +10,16 @@ public partial class SephiriaToolbox
                  PlayKill = 0.35, PlaySummon = 0.8, PlayEnemies = 2.5, PlayUnknown = 0.3, PlayAbility = 0.5, PlayDebuff = 1.0,
                  PlayKillBoss = 0.05;
 
-    static double SwingDefault(EWeaponType t) => t switch
+    static double SwingDefault(WeaponSimple w) => w.weaponType switch
     {
-        EWeaponType.SwordAndShield => 2.4,
+        EWeaponType.SwordAndShield => 2.24,
         EWeaponType.GreatSword => 1.3,
-        EWeaponType.Dagger => 3.2,
+        EWeaponType.Dagger => w.attackMoveSet == 2 ? 3.9 : 4.9,
         EWeaponType.Crossbow => 2.0,
         EWeaponType.StaffMagic => 1.8,
         EWeaponType.Katana => 2.2,
         EWeaponType.Golem => 2.0,
-        EWeaponType.Staff => 1.8,
+        EWeaponType.Staff => w.attackMoveSet == 1 ? 2.7 : w.attackMoveSet == 2 ? 1.85 : 1.7,
         _ => 2.0
     };
 
@@ -99,7 +99,7 @@ public partial class SephiriaToolbox
                 break;
             default:
                 swingCount++;
-                swingWeighted += 1.0 / AttackSpeedFactor(a.GetCustomStat(ECustomStat.AttackSpeed), w.attackSpeedAmplify);
+                swingWeighted += 1.0 / SwingSpeedNow(a, w);
                 break;
         }
     }
@@ -108,7 +108,7 @@ public partial class SephiriaToolbox
     {
         if (w is WeaponSimple_SwordAndShield { isFlameEaterHaetaeEnabled: true } && fireId == 20) return 2;
         if (w is WeaponSimple_Crossbow { isMinigunFiring: true }) return 2;
-        if (w is WeaponSimple_Katana { isBladeSheathed: true }) return 2;
+        if (w is WeaponSimple_Katana { isBladeSheathed: true } kt && !(kt.useSheathHardening && FieldValue(kt, "isBladeStuck") is true)) return 2;
         if (an == null) return 0;
         byte kind = 0;
         for (int layer = 0; layer < an.layerCount; layer++)
@@ -139,15 +139,57 @@ public partial class SephiriaToolbox
         swingWeighted = 0;
         lastSwingValue = pendingSwing = -1;
         swingCombatStart = runCombatTime;
+        ResetDashes();
+    }
+
+    static Dictionary<string, float> clipSeconds;
+
+    double ClipSeconds(string name, double fallback)
+    {
+        if (clipSeconds == null)
+        {
+            try
+            {
+                var rc = swingController != null && swingController.animator != null ? swingController.animator.runtimeAnimatorController : null;
+                if (rc != null)
+                {
+                    var map = new Dictionary<string, float>(StringComparer.Ordinal);
+                    foreach (var c in rc.animationClips) if (c != null) map[c.name] = c.length;
+                    clipSeconds = map;
+                }
+            }
+            catch (Exception e) { WarnOnce("动画片段时长", e); clipSeconds = new Dictionary<string, float>(); }
+        }
+        return clipSeconds != null && clipSeconds.TryGetValue(name, out var v) && v > 0.01f ? v : fallback;
     }
 
     static double MoveSetSpeed(WeaponSimple w) => w is WeaponSimple_GreatSword && w.attackMoveSet == 1 ? 1.15 : 1;
 
     static double AttackSpeedFactor(double attackSpeed, double amplify) => Math.Max(0.1, (attackSpeed * (1 + amplify) + 100) / 100.0);
 
+    static double SwingCurve(double asFactor, double fixedShare) =>
+        fixedShare > 0 ? (1 + fixedShare) / (1 / Math.Max(0.05, asFactor) + fixedShare) : asFactor;
+
+    double SwingFixedShare(WeaponSimple w)
+    {
+        if (w is not WeaponSimple_SwordAndShield) return 0;
+        if (SsRapier(w))
+            return ClipSeconds("SwordAndShield_New_WaitForAttackEnd_Rapier", 0.083)
+                 / Math.Max(0.1, ClipSeconds("SwordAndShield_New_Attack1_Rapier", 0.333) + ClipSeconds("SwordAndShield_New_Attack2_Rapier", 0.354));
+        return ClipSeconds("SwordAndShield_New_WaitForAttackEnd", 0.15)
+             / Math.Max(0.1, ClipSeconds("SwordAndShield_New_Attack1", 0.283) + ClipSeconds("SwordAndShield_New_Attack2", 0.333) + ClipSeconds("SwordAndShield_New_Attack3", 0.575));
+    }
+
+    double SwingSpeedNow(PlayerAvatar a, WeaponSimple w)
+    {
+        int fixedAs = a.GetCustomStatUnsafe("FIXEDATTACKSPEED");
+        double asf = fixedAs > 0 ? Math.Max(0.1, fixedAs / 100.0) : AttackSpeedFactor(a.GetCustomStat(ECustomStat.AttackSpeed), WeaponAsAmp(w));
+        return SwingCurve(asf, SwingFixedShare(w));
+    }
+
     Behavior MeasureBehavior(WeaponSimple weapon, bool single)
     {
-        var b = new Behavior { Swing = weapon != null ? SwingDefault(weapon.weaponType) : 2.0, Single = single };
+        var b = new Behavior { Swing = weapon != null ? SwingDefault(weapon) : 2.0, Single = single };
         if (EnemiesMeasured(out var enemies)) b.EnemiesM = enemies;
         if (SpecialMeasuredRate(out var sp)) { b.Special = sp; b.SpecialMeasured = true; }
         if (weapon != null)
@@ -155,7 +197,7 @@ public partial class SephiriaToolbox
             b.Weapon = weapon.weaponType;
             b.ComboLength = ComboLengthOf(weapon);
             b.AttackWeight = Math.Max(0.05, weapon.AttackWeightPerSwing);
-            b.HitsPerSwingM = weapon.weaponType is EWeaponType.Crossbow or EWeaponType.StaffMagic or EWeaponType.Golem ? 1.0 : Math.Min(2.5, Math.Max(1, 0.6 * b.EnemiesM));
+            b.HitsPerSwingM = RangedWeapon(weapon) ? 1.0 : Math.Min(2.5, Math.Max(1, 0.6 * b.EnemiesM));
             double seconds = runCombatTime - swingCombatStart;
             bool same = weapon.entityId == swingWeaponId
                         || (weaponOverride != null && swingController != null && swingController.currentWeapon != null
@@ -190,6 +232,11 @@ public partial class SephiriaToolbox
             if (SsRapier(weapon))
             {
                 b.Rapier = true;
+                b.DashAttack = 0;
+                b.DashAttackMeasured = false;
+            }
+            if (weapon is WeaponSimple_QuartterStaff { isNormalAttackRolling: true })
+            {
                 b.DashAttack = 0;
                 b.DashAttackMeasured = false;
             }

@@ -25,8 +25,18 @@ public partial class SephiriaToolbox
         if (w is WeaponSimple_Dagger dg) return DaggerMoves(dg);
         if (w is WeaponSimple_Crossbow xb) return CrossbowMoves(xb);
         if (w is WeaponSimple_Katana kt) return KatanaMoves(kt);
-        if (w is WeaponSimple_QuartterStaff qs) return QuarterStaffMoves(qs, play);
+        if (w is WeaponSimple_QuartterStaff qs) return QuarterStaffMoves(qs, a, play);
         return GenericMoves(w);
+    }
+
+    static bool RangedWeapon(WeaponSimple w)
+    {
+        if (w == null) return false;
+        if (w.weaponType is EWeaponType.Crossbow or EWeaponType.StaffMagic or EWeaponType.Golem) return true;
+        if (w is WeaponSimple_QuartterStaff { isNormalAttackRolling: true } qs)
+            return qs.rollingFireData != null && qs.rollingFireData is not NewWeaponFireData_MeleeAttack;
+        var first = w.basicComboAttacks?.FirstOrDefault(f => f != null);
+        return first != null && first is not NewWeaponFireData_MeleeAttack;
     }
 
     static double HitMult(NewWeaponFireData f) => f == null ? 0 : f.damageMultiplier * FireHits(f);

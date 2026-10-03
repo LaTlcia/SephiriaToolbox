@@ -14,9 +14,12 @@ public partial class SephiriaToolbox
     {
         double CharmBonus() => d.kCharmDmg >= 0 ? T(d.kCharmDmg) : 0;
 
-        double ModMul(DpsSource s) { int e = DmgElemOf(s); return (modMul[0] * (s.Direct ? modMul[1] : 1) * (e is >= 0 and < 4 ? modMul[2 + e] : 1) - 1) * 100; }
+        double ModMul(DpsSource s) { int e = DmgElemOf(s); return (modMul[0] * (s.Summon ? 1 : modOwn) * (s.Direct ? modMul[1] : 1) * (e is >= 0 and < 4 ? modMul[2 + e] : 1) - 1) * 100; }
         double ModCrit(DpsSource s) { int e = DmgElemOf(s); return modCrit[0] + (s.Direct ? modCrit[1] : 0) + (e is >= 0 and < 4 ? modCrit[2 + e] : 0); }
         double ModCritDmg(DpsSource s) { int e = DmgElemOf(s); return modCritDmg[0] + (s.Direct ? modCritDmg[1] : 0) + (e is >= 0 and < 4 ? modCritDmg[2 + e] : 0); }
+
+        double CritAddOf(DpsSource s) => (s.MagicCrit ? T(d.kMCrit) / 100.0 : 0) + (s.WeaponCrit ? T(d.kWCrit) / 100.0 : 0);
+        double CritDmgAddOf(DpsSource s) => (s.MagicCrit ? T(d.kMCritDmg) : 0) + (s.WeaponCrit ? T(d.kWCritDmg) : 0);
 
         double CF(double chance, double rate, bool exec) =>
             CritFactor(Single && d.BossCritResist > 0 ? chance * Math.Max(0, 1 - d.BossCritResist / 100.0) : chance, rate, exec);
@@ -48,7 +51,7 @@ public partial class SephiriaToolbox
                 a += T(d.kFollowerDmg);
                 if (T(d.kAdvNego) >= 1) a += T(d.kNego);
             }
-            double v = Pct(a) * DefenseFactor(s);
+            double v = Pct(a) * DefenseFactor(s) * d.ConstMul;
             if (T(d.kGoldHand) > 0) v *= 1 + (T(d.kGoldHandUnl) > 0 ? d.GoldHandPctUnl : d.GoldHandPct) / 100.0;
             if (T(d.kDefToAtk) > 0)
             {
@@ -73,7 +76,15 @@ public partial class SephiriaToolbox
             double def = Single ? (d.StageDefKnown ? d.StageDef : d.EnemyDef) + d.BossDefBonus : d.EnemyDef;
             if (def == 0) return 1;
             double r = def > 0 ? Math.Min(1, Math.Log(def / 40.0 + 1) * 0.445) : def / 100.0;
-            double ignore = T(d.kIgnoreDef) + (s.Eco == EcoKind.FlameSword ? T(d.kFsIgnore) : 0);
+            bool flameSpear = s.Kind == SrcKind.WeaponSpecial && d.Weapon.Qs != null && d.Weapon.Qs.FlameSpear;
+            double ignore = T(d.kIgnoreDef) + (s.Eco == EcoKind.FlameSword || flameSpear ? T(d.kFsIgnore) : 0);
+            if (s.Kind == SrcKind.WeaponBasic && d.Weapon.Eclipse && d.Eco != null && T(d.kFsIgnore) != 0)
+            {
+                EclipseState(out _, out var share);
+                double ig2 = ignore + T(d.kFsIgnore);
+                double r1 = ignore > 0 ? r * (1 - ignore / 100.0) : r, r2 = ig2 > 0 ? r * (1 - ig2 / 100.0) : r;
+                return Math.Max(0.01, 1 - ((1 - share) * r1 + share * r2));
+            }
             if (ignore > 0) r *= 1 - ignore / 100.0;
             return Math.Max(0.01, 1 - r);
         }
@@ -205,19 +216,35 @@ public partial class SephiriaToolbox
                 {
                     if (!ItemOn[s.Item]) return 0;
                     int idx = Math.Min(Math.Max(ItemLevel[s.Item], 0), m.Items[s.Item].MaxLevel);
-                    double baseDmg = 1;
+                    double baseDmg = 1, power = 1 + (boost[s.Item] + CharmBonus()) / 100.0;
                     if (s.Default != null || s.Percent != null)
                     {
                         double related = s.RelKey != null ? (Array.IndexOf(ElemKeys, s.RelKey) >= 0 ? StatOf(s.RelKey) : 0) : 0;
-                        baseDmg = SafeAt(s.Default, idx) + related * SafeAt(s.Percent, idx) / 100.0;
+                        baseDmg = SafeAt(s.Default, idx) + related * SafeAt(s.Percent, idx) / 100.0 * (s.PowerOnStat ? power : 1);
                     }
                     var rate = RateOf(s);
                     double hits = (rate != null ? SafeAt(rate, idx) : 1) * MultiCast();
                     if (d.Extra[s.Item].BoltMagic) hits *= boltFactor;
                     double casts = manualRate[s.Item] * (1 + MagicCostNow(s, idx) / 10.0 * T(d.kMagicMp) / 100.0)
-                                 + autoRate[s.Item] + boltRate[s.Item] * Pct(T(d.kBad));
-                    return baseDmg * hits * Pct(T(d.kMpSkill)) * (1 + (boost[s.Item] + CharmBonus()) / 100.0) * Pct(T(d.kMdb)) * all * Pct(ModMul(s)) * casts
-                         * CF(crit + T(d.kMCrit) / 100.0 + ModCrit(s), critDmg + T(d.kMCritDmg) + ModCritDmg(s), exec);
+                                 + autoRate[s.Item] + dupRate[s.Item] + boltRate[s.Item] * Pct(T(d.kBad));
+                    return baseDmg * hits * Pct(T(d.kMpSkill)) * power * Pct(T(d.kMdb)) * all * Pct(ModMul(s)) * casts * (1 + d.Weapon.MagicWoundPct / 100.0)
+                         * CF(crit + T(d.kMCrit) / 100.0 + ModCrit(s) + SafeAt(s.CritAdd, idx), critDmg + T(d.kMCritDmg) + ModCritDmg(s), exec);
+                }
+                case SrcKind.Rider when s.SwingScaled:
+                {
+                    double stat = s.ElemIdx >= 0 ? ElemVal(s.ElemIdx) : s.StatKey >= 0 ? T(s.StatKey) : 0;
+                    double pct = s.AddBase + (s.AddKey >= 0 ? T(s.AddKey) : 0), basicBonus = 1;
+                    if (s.EclipseAdd > 0 && d.Weapon.Eclipse && d.Eco != null)
+                    {
+                        EclipseState(out _, out var share);
+                        pct += share * s.EclipseAdd;
+                        basicBonus = 1 + share * T(d.Eco.kFsDmg) / 100.0;
+                    }
+                    double rates = s.RideBasic * SwingAs() * Pct(T(s.RideBasicAsDash ? d.kDad : d.kBad)) * basicBonus
+                                 + s.RideSpecial * SpecialScale() * Pct(T(d.kSad))
+                                 + s.RideDash * Pct(T(d.kDad));
+                    return stat * Math.Max(0, pct) / 100.0 * rates * Pct(T(d.kWdb)) * Pct(T(d.kFwd)) * all * Pct(ModMul(s))
+                         * (s.NoCrit ? 1 : CF(crit + ModCrit(s), critDmg + ModCritDmg(s), exec));
                 }
                 case SrcKind.Rider:
                 {
@@ -230,14 +257,16 @@ public partial class SephiriaToolbox
                     return v;
                 }
                 case SrcKind.Ability:
-                    return Base(s, 0) * RateFactor(s, 0) * all * Pct(ModMul(s)) * (s.NoCrit ? 1 : CF(crit + ModCrit(s), critDmg + ModCritDmg(s), exec))
+                {
+                    return Base(s, 0) * RateFactor(s, 0) * all * Pct(ModMul(s)) * (s.NoCrit ? 1 : CF(crit + ModCrit(s) + CritAddOf(s), critDmg + ModCritDmg(s) + CritDmgAddOf(s), exec))
                          * (s.BurnRing ? BurnRingUp(s) : 1);
+                }
                 case SrcKind.Proc:
                 {
                     if (!ItemOn[s.Item]) return 0;
                     int idx = Math.Min(Math.Max(ItemLevel[s.Item], 0), m.Items[s.Item].MaxLevel);
                     double v = Base(s, idx) * RateFactor(s, idx) * (1 + (boost[s.Item] + CharmBonus()) / 100.0) * all * Pct(ModMul(s))
-                             * (s.NoCrit ? 1 : CF(crit + ModCrit(s), (critDmg + ModCritDmg(s)) * (1 + SafeAt(s.CritDmgAmp, idx) / 100.0), exec)) * FirstUseBonus(s);
+                             * (s.NoCrit ? 1 : CF(crit + ModCrit(s) + CritAddOf(s), (critDmg + ModCritDmg(s) + CritDmgAddOf(s)) * (1 + SafeAt(s.CritDmgAmp, idx) / 100.0), exec)) * FirstUseBonus(s);
                     if (enhanced[s.Item]) v *= 1.5;
                     if (s.Column)
                     {

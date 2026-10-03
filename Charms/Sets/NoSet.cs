@@ -27,6 +27,8 @@ public partial class SephiriaToolbox
             }
         });
 
+        PassiveDefs["Charm_IncreaseMoveSpeed"] = P(new PassiveDef { Kind = PKind.Stat, Key = MoveSpeedKey, By = "moveSpeedByLevel", Scale = 100 });
+
         CharmMechs["Charm_NearMagicBullet"] = new() { Trig = Trig.MagicCast, Note = Tr("trigger.fireworks_when_magic_same") };
     }
 }

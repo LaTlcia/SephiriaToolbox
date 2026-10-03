@@ -27,6 +27,10 @@ public partial class SephiriaToolbox
         public float[] Table;
         public double Cooldown = 10;
         public int Ammo = 1;
+        public bool PowerOnStat;
+        public float[] CritAdd;
+        public float HitInterval;
+        public double DirectCap;
         public bool Column;
         public readonly HashSet<string> Ids = new();
         public double Measured, K, Weight;
@@ -38,12 +42,16 @@ public partial class SephiriaToolbox
         public int AddKey = -1;
         public double AddBase;
         public bool NoCrit;
+        public bool MagicCrit;
+        public bool WeaponCrit;
         public Slope[] Slopes;
         public double TheoryK;
         public bool HasTheory;
         public bool SwingBased;
         public RateStat StatRate;
         public float StatCap;
+        public double CdSeconds, CdBase, CdBaseM;
+        public double CdChance = 1;
         public int HasteKey = -1, AmpKey = -1;
         public float ChanceBase;
         public float[] ChanceTable;
@@ -53,10 +61,14 @@ public partial class SephiriaToolbox
         public int DmgElem = -1;
         public bool Direct;
         public bool Summon;
+        public double SummonWait, SummonFixed;
         public int GateCat = -1, GateCount;
         public double FinalShare;
         public bool AsDash;
         public bool PerCrit;
+        public bool SwingScaled, RideBasicAsDash;
+        public double RideBasic, RideSpecial, RideDash;
+        public double EclipseAdd;
         public bool BurnRing;
         public int RateKeyA = -1, RateKeyB = -1;
         public EcoKind Eco;
@@ -109,6 +121,7 @@ public partial class SephiriaToolbox
         public byte Kind;
         public int Elem = -1;
         public bool Direct;
+        public bool OwnOnly;
         public float[] Values;
     }
 
@@ -173,6 +186,9 @@ public partial class SephiriaToolbox
         public double GuardRate, PerfectGuardRate;
         public int kGuardResist = -1, kInfMp = -1;
         public readonly List<DynBuff> DynBuffs = new();
+        public readonly List<MagicBuff> MagicBuffs = new();
+        public int kEvCd = -1, kBoltHoming = -1;
+        public double BoltSideShare = 1;
         public readonly double[] BossResist = new double[4];
         public double BossCritResist, BossToughness, BossDefBonus;
         public string BossAffix;
@@ -180,7 +196,7 @@ public partial class SephiriaToolbox
         public double StageDef, StagePlate;
         public readonly double[] OtherDebuff = new double[6];
         public double OtherDebuffObjects;
-        public int kEvasion = -1;
+        public int kEvasion = -1, kDashEvasion = -1;
         public double EvadeAttempts = PlayDamaged, BossIgnoreEvasion;
         public readonly List<(int Item, float[] Seconds)> EvadeBarriers = new();
         public readonly List<MpDrain> MpDrains = new();
@@ -210,6 +226,9 @@ public partial class SephiriaToolbox
         public double MultiBase = 1;
         public readonly List<Feeder> MultiCast = new();
         public bool Melee = true;
+        public double Dash = PlayDash;
+        public double MpGain = 1;
+        public double ConstMul = 1;
     }
 
     static readonly string[] ElemKeys = { "PHYSICALDAMAGE", "FIREDAMAGE", "ICEDAMAGE", "LIGHTNINGDAMAGE" };

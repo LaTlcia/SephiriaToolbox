@@ -13,6 +13,10 @@ public partial class SephiriaToolbox
         public double LightMult, NormalMult = 1;
         public double IceUp, IceMult;
         public bool IceRelic;
+        public int kRelicAmp = -1, kRelicRetrig = -1, kRelicHaste = -1;
+        public double RetrigPer = 100;
+        public bool Continue;
+        public double ContinueStep = 10, ContinueMax = 5;
         public double FastShare, FastSpeed = 5;
         public double CompShare, CompBonus = 25, CompMult, EnhMult, EnhThreshold;
         public bool Drone;
@@ -57,6 +61,8 @@ public partial class SephiriaToolbox
         if (xb.lightningArrow != null) { x.kLightning = K("LIGHTNINGCROSSBOW"); x.LightMult = HitMult(xb.lightningArrow); }
         x.Drone = xb.useMiniDrone;
         x.DronePerMp = xb.miniDroneAddDamagePercentPerMP;
+        x.Continue = xb.continueBonus && xb.specialAttackType == WeaponSimple_Crossbow.ESpecialAttackType.FireBullet;
+        if (x.Continue) m.Notes.Add(Tr("weapon.continue_bonus", x.ContinueStep, x.ContinueStep * x.ContinueMax));
         if (HasAddon<WeaponAddonCommon_C4Bomb>(xb))
         {
             x.C4 = true;
@@ -76,14 +82,17 @@ public partial class SephiriaToolbox
         x.Cost = Math.Max(0, (x.Drone ? 3 : xb.specialAttackCost) * (1 - avatar.GetCustomStatUnsafe("SPECIALATTACKCOSTREDUCTION") / 100.0));
         double poolPeriod = play.Single ? d.FightLen / Math.Max(1, BossRefillsPerFight()) : BattleLength();
         double Casts(double cost, double cap) => cost <= 0 || avatar.GetCustomStatUnsafe("INFINITYMP") > 0 ? cap
-            : SweepRate(cost, avatar.GetCustomStatUnsafe("MPREGEN"), avatar.GetCustomStatUnsafe("MPRESONANCE"), avatar.GetCustomStat(ECustomStat.MPSteal),
+            : SweepRate(cost, avatar.GetCustomStatUnsafe("MPREGEN") * MpGain(avatar), avatar.GetCustomStatUnsafe("MPRESONANCE"), avatar.GetCustomStat(ECustomStat.MPSteal) * MpGain(avatar),
                         SweepDps(avatar), avatar.MaxMp - avatar.reservedMp, poolPeriod, cap: cap);
-        double reload = xb.reloadTime / Math.Max(0.1, 1 + avatar.GetCustomStatUnsafe("CROSSBOWRELOADSPEED") / 100.0);
+        double reloadSpeed = avatar.GetCustomStatUnsafe("CROSSBOWRELOADSPEED") / 100.0;
+        double reload = xb.reloadTime / Math.Max(0.1, 1 + reloadSpeed);
         double ammo = Math.Max(1, avatar.GetCustomStatUnsafe("FIXEDAMMO") > 0 ? avatar.GetCustomStatUnsafe("FIXEDAMMO")
                                   : xb.defaultMagazineCapacity + avatar.GetCustomStatUnsafe("CROSSBOWAMMO"));
         double interval = xb.fireIntervalTimer != null && xb.fireIntervalTimer.time > 0 ? xb.fireIntervalTimer.time : 0.3;
         double spd = Math.Max(0.1, 1 + avatar.GetCustomStat(ECustomStat.AttackSpeed) / 100.0);
         double cycle = ammo * interval / spd + reload, cycles = 1 / Math.Max(0.1, cycle);
+        double magazines = avatar.GetCustomStatUnsafe("FIXEDAMMO") > 0 ? 1 : Math.Max(1, xb.defaultMagazineCount + avatar.GetCustomStatUnsafe("CROSSBOWADDITIONALMAGAZINE"));
+        buildReloadCycle = magazines * ammo * interval / spd + reload;
         switch (xb.specialAttackType)
         {
             case WeaponSimple_Crossbow.ESpecialAttackType.FireBullet:
@@ -124,6 +133,11 @@ public partial class SephiriaToolbox
                 x.IceUp = Math.Min(1, casts * dur);
                 x.IceMult = HitMult(xb.iceArrow);
                 x.IceRelic = buff is CharacterBuff_StatusUnsafe su && su.add != null && su.add.Any(a => a != null && a.id == "ICECROSSBOWFROSTRELIC");
+                if (x.IceRelic)
+                {
+                    x.kRelicAmp = K("CHARGINGCHARMAMPLIFY"); x.kRelicRetrig = K("CHARGINGCHARMRETRIGGERBYATTACKSPEED"); x.kRelicHaste = K("CHARGINGCHARMBONUS");
+                    x.RetrigPer = Math.Max(1, ConstOr("chargingCharmRetriggerByAttackSpeed", 100));
+                }
                 play.Special = 0;
                 if (buff != null)
                     foreach (var (key, mode, v) in BuffStats(buff))
@@ -148,8 +162,8 @@ public partial class SephiriaToolbox
         if (!play.SwingMeasured)
         {
             double mags = avatar.GetCustomStatUnsafe("FIXEDAMMO") > 0 ? 1 : Math.Max(1, xb.defaultMagazineCount + avatar.GetCustomStatUnsafe("CROSSBOWADDITIONALMAGAZINE"));
-            double r = reload * (1 - x.FastShare + x.FastShare / Math.Max(1, x.FastSpeed));
-            if (avatar.GetCustomStatUnsafe("DASHRELOAD") > 0) r = (1 - Math.Exp(-PlayDash * r)) / PlayDash;
+            double r = (1 - x.FastShare) * reload + x.FastShare * xb.reloadTime / Math.Max(0.1, x.FastSpeed + reloadSpeed);
+            if (avatar.GetCustomStatUnsafe("DASHRELOAD") > 0) r = Math.Min(r, Math.Max(w.XbDashTime, w.XbDashEvery - ammo * interval / spd));
             double t = interval / spd, rm = r / mags, s = x.CompShare;
             double shots = ((1 - s) * ammo + s) / Math.Max(1e-6, (1 - s) * (ammo * t + rm) + s * (t + rm));
             play.Swing = Math.Max(0.2, shots / Math.Max(0.1, AttackSpeedFactor(avatar.GetCustomStat(ECustomStat.AttackSpeed), WeaponAsAmp(xb))));
@@ -175,7 +189,7 @@ public partial class SephiriaToolbox
             double f = 1;
             if (x.IceUp > 0 && x.IceMult > 0)
             {
-                double ice = elem[2] * x.IceMult / (en * x.NormalMult) * (x.IceRelic ? Pct(T(d.Weapon.kFrostRelicDmg)) : 1);
+                double ice = elem[2] * x.IceMult / (en * x.NormalMult) * (x.IceRelic ? Pct(T(d.Weapon.kFrostRelicDmg)) * XbRelicShots() : 1);
                 f = (1 - x.IceUp) + x.IceUp * ice;
             }
             if (x.kLightning >= 0 && x.LightMult > 0)
@@ -198,13 +212,42 @@ public partial class SephiriaToolbox
             return ((1 - s) * n + s * comp) / Math.Max(1e-9, (1 - s) * n + s);
         }
 
+        double XbRelicShots()
+        {
+            var x = d.Weapon.Xb;
+            double extra = Math.Max(0, T(x.kRelicAmp)), re = T(x.kRelicRetrig), a = T(d.kAs);
+            if (re > 0 && a > 0) extra += Math.Min(100, a / x.RetrigPer * re) / 100.0;
+            return 1 + extra;
+        }
+
+        double XbRelicFires()
+        {
+            var x = d.Weapon.Xb;
+            return x != null && x.IceRelic ? d.Hits.Swing * SwingAs() * x.IceUp : 0;
+        }
+
         double XbSpecialFactor()
         {
             var x = d.Weapon.Xb;
             if (x == null) return 1;
             if (x.C4) return XbC4Factor();
-            if (!x.Drone) return 1;
-            return Pct(Math.Max(0, MaxMp() - 50) * x.DronePerMp);
+            double add = 0;
+            if (x.Drone) add += Math.Max(0, MaxMp() - 50) * x.DronePerMp;
+            if (x.Continue) add += XbContinueBonus();
+            return Pct(add);
+        }
+
+        double XbContinueBonus()
+        {
+            var x = d.Weapon.Xb;
+            var sw = d.Sweep;
+            double top = x.ContinueStep * x.ContinueMax;
+            if (sw == null) return 0;
+            if (d.kInfMp >= 0 && T(d.kInfMp) > 0) return top;
+            double cost = SweepCost(sw.Cost0, T(sw.kCostRed), T(sw.kSpecCostRed));
+            if (cost <= 0) return top;
+            double n = Math.Max(1, Math.Floor(Math.Max(0, MaxMp() - sw.Reserved) / cost)), m = Math.Min(n, x.ContinueMax + 1);
+            return x.ContinueStep * (m * (m - 1) / 2 + (n - m) * x.ContinueMax) / n;
         }
 
         double XbC4Factor()

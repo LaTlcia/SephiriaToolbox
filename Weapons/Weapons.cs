@@ -8,11 +8,13 @@ public partial class SephiriaToolbox
     sealed class WeaponModel
     {
         public double AsNow = 1;
+        public double SwingFixed;
         public bool Crossbow;
-        public double XbInterval = 0.08, XbReload = 2, XbCap = 6, XbMags = 1, XbMoveExcess, XbRateNow = 1;
+        public double XbInterval = 0.08, XbReload = 2, XbCap = 6, XbMags = 1, XbRateNow = 1;
+        public double XbDashEvery = 3.3, XbDashTime = 0.25;
         public bool XbCompression, XbFrostRelic;
         public int kXbAmmo = -1, kXbMag = -1, kXbReload = -1, kXbFixedAmmo = -1, kXbDashReload = -1, kXbCritAmmo = -1, kXbGrenade = -1,
-                   kXbMg = -1, kXbMoveAs = -1, kXbIceSlow = -1, kXbDashDmg = -1, kXbIceBuff = -1, kXbFrostRelicStat = -1, kFrostRelicDmg = -1;
+                   kXbMg = -1, kXbMoveAs = -1, kMove = -1, kXbIceSlow = -1, kXbDashDmg = -1, kXbIceBuff = -1, kXbFrostRelicStat = -1, kFrostRelicDmg = -1;
         public bool Katana, Eclipse, CloudSlash;
         public int kDefKatana = -1, kSpeedSheath = -1, kEvaSheath = -1, kEvasion = -1;
         public double EclipsePerSword = 10, EclipseMaxSwords = 10, EclipseTime = 10, CloudSlashPerStack = 5, CloudSlashMax = 20,
@@ -23,6 +25,8 @@ public partial class SephiriaToolbox
         public bool CloudBottle;
         public double CloudBottlePct = 70;
         public double BoltSwing;
+        public double CloudBottles = 1;
+        public double MagicWoundPct;
         public bool SpecialMp, BasicMp;
         public bool Melee;
         public int kRange = -1;
@@ -34,6 +38,7 @@ public partial class SephiriaToolbox
         public DgModel Dg;
         public XbModel Xb;
         public QsModel Qs;
+        public KtModel Kt;
         public readonly List<(int Item, float[] Ammo)> XbDashAmmo = new();
         public readonly List<CondDamage> CondDmg = new();
         public double BurnRingTime = 10;
@@ -51,10 +56,11 @@ public partial class SephiriaToolbox
         var w = d.Weapon;
         if (weapon == null) return;
         w.AsNow = AttackSpeedFactor(avatar.GetCustomStat(ECustomStat.AttackSpeed), WeaponAsAmp(weapon));
+        w.SwingFixed = SwingFixedShare(weapon);
         w.SpecialMp = weapon is WeaponSimple_SwordAndShield or WeaponSimple_GreatSword or WeaponSimple_Dagger or WeaponSimple_Katana
                       or WeaponSimple_Katana_New or WeaponSimple_Crossbow or WeaponSimple_QuartterStaff;
         w.BasicMp = weapon is WeaponSimple_GreatSword gs && gs.useMPBasicAttack;
-        w.Melee = !(weapon.weaponType is EWeaponType.Crossbow or EWeaponType.StaffMagic or EWeaponType.Golem or EWeaponType.Staff);
+        w.Melee = !RangedWeapon(weapon);
         w.kRange = K("WEAPONRANGE");
         w.RangeNow = RangeHits(avatar.GetCustomStat(ECustomStat.WeaponRange));
         w.HitsCap = Math.Max(1, play.Enemies / Math.Max(1, play.HitsPerSwing));
@@ -78,7 +84,9 @@ public partial class SephiriaToolbox
                 w.XbMags = Math.Max(1, xb.defaultMagazineCount);
                 w.XbCompression = xb.specialAttackType == WeaponSimple_Crossbow.ESpecialAttackType.AmmoCompression;
                 w.XbFrostRelic = xb.specialAttackType == WeaponSimple_Crossbow.ESpecialAttackType.IceBuff;
-                w.XbMoveExcess = Math.Max(0, avatar.moveSpeedMultiplier - 1);
+                w.kMove = K(MoveSpeedKey);
+                d.ExtraBase[w.kMove] = (avatar.moveSpeedMultiplier - 1) * 100;
+                w.XbDashEvery = DashMeasured(out var dashNow) ? 1 / dashNow : DashCooldown(avatar);
                 w.kXbAmmo = K("CROSSBOWAMMO"); w.kXbMag = K("CROSSBOWADDITIONALMAGAZINE"); w.kXbReload = K("CROSSBOWRELOADSPEED");
                 w.kXbFixedAmmo = K("FIXEDAMMO"); w.kXbDashReload = K("DASHRELOAD"); w.kXbCritAmmo = K("ADDAMMOWHENCRITICAL");
                 w.kXbGrenade = K("GRENADEATTACK"); w.kXbMg = K("CROSSBOWMG"); w.kXbMoveAs = K("MOVESPEEDTOATTACKSPEED");
@@ -89,8 +97,8 @@ public partial class SephiriaToolbox
             case WeaponSimple_Katana kt:
             {
                 w.Katana = true;
-                w.Eclipse = kt.sheathActionType == WeaponSimple_Katana.ESheathActionType.Eclipse;
-                w.CloudSlash = kt.sheathActionType == WeaponSimple_Katana.ESheathActionType.CloudSlash;
+                w.Eclipse = KatanaSheathKind(kt) == 2;
+                w.CloudSlash = KatanaSheathKind(kt) == 3;
                 w.EclipsePerSword = ConstOr("katanaEclipseDamageBonusByConsumeSwordCount", 10);
                 w.EclipseMaxSwords = ConstOr("katanaConsumeSwordCountLimit", 10);
                 w.EclipseTime = ConstOr("katanaEclipseBuffTime", 10);
@@ -110,14 +118,22 @@ public partial class SephiriaToolbox
                 BuildDaggerModel(avatar, d, K, dagger, play);
                 break;
             case WeaponSimple_QuartterStaff qs:
-                w.CloudBottle = qs.changedDashAttackParameter == "CLOUDBOTTLE";
+                w.CloudBottle = ThrowsCloudBottle(qs);
                 w.CloudBottlePct = ConstOr("throwCloudBottleDamagePercent", 70);
+                if (w.CloudBottle)
+                {
+                    var bottle = qs.addons?.OfType<WeaponAddonCommon_ChangeWeaponAction>()
+                                   .FirstOrDefault(x => x != null && x.fireData != null && string.Equals(x.changeWeaponActionName, "DASHATTACK", StringComparison.OrdinalIgnoreCase));
+                    w.CloudBottles = CloudBottleCount(bottle?.fireData, avatar);
+                }
                 break;
         }
     }
 
     sealed partial class Evaluator
     {
+        const double XbMgBonus = 0.5;
+
         double CrossbowRate()
         {
             var w = d.Weapon;
@@ -127,8 +143,8 @@ public partial class SephiriaToolbox
             else
             {
                 spd = 1 + T(d.kAs) / 100.0 - Math.Max(0, T(w.kXbIceSlow)) / 100.0;
-                if (T(w.kXbMoveAs) > 0) spd += w.XbMoveExcess;
-                if (T(w.kXbMg) > 0) spd += 0.3;
+                if (T(w.kXbMoveAs) > 0) spd += Math.Max(0, T(w.kMove)) / 100.0;
+                if (T(w.kXbMg) > 0) spd += XbMgBonus;
             }
             double fire = Math.Max(0.05, spd) / Math.Max(0.01, w.XbInterval);
             double mags = T(w.kXbFixedAmmo) > 0 ? 1 : Math.Max(1, w.XbMags + T(w.kXbMag));
@@ -139,11 +155,13 @@ public partial class SephiriaToolbox
                 double p = Math.Min(1, Math.Max(0, (T(d.kCrit) + T(d.kWCrit)) / 10000.0)) * refund;
                 n = p >= 0.95 ? n * 20 : n / (1 - p);
             }
-            double reload = w.XbReload / Math.Max(0.1, 1 + T(w.kXbReload) / 100.0);
-            if (w.Xb != null && w.Xb.FastShare > 0) reload *= 1 - w.Xb.FastShare + w.Xb.FastShare / w.Xb.FastSpeed;
-            if (T(w.kXbDashReload) > 0) reload = (1 - Math.Exp(-PlayDash * reload)) / PlayDash;
+            double rs = T(w.kXbReload) / 100.0 + (w.Xb != null && w.Xb.IceRelic ? w.Xb.IceUp * Math.Max(0, T(w.Xb.kRelicHaste)) / 100.0 : 0);
+            double reload = w.XbReload / Math.Max(0.1, 1 + rs);
+            if (w.Xb != null && w.Xb.FastShare > 0)
+                reload = (1 - w.Xb.FastShare) * reload + w.Xb.FastShare * w.XbReload / Math.Max(0.1, w.Xb.FastSpeed + rs);
+            if (T(w.kXbDashReload) > 0) reload = Math.Min(reload, Math.Max(w.XbDashTime, w.XbDashEvery - n / fire));
             double inflow = 0;
-            foreach (var (item, ammo) in w.XbDashAmmo) if (ItemOn[item]) inflow += SafeAt(ammo, IdxOf(item)) * PlayDash;
+            foreach (var (item, ammo) in w.XbDashAmmo) if (ItemOn[item]) inflow += SafeAt(ammo, IdxOf(item)) * d.Dash;
             if (inflow > 0)
             {
                 if (inflow >= fire * 0.999) return fire;
@@ -208,7 +226,7 @@ public partial class SephiriaToolbox
             eclipseShare = 0;
             var w = d.Weapon;
             double v = 1;
-            if (s.Kind == SrcKind.WeaponSpecial && w.SpecialMp || s.Kind == SrcKind.WeaponBasic && w.BasicMp) v *= Pct(T(d.kMpSkill));
+            if (s.Kind == SrcKind.WeaponSpecial && w.SpecialMp && SpecialPaysMp() || s.Kind == SrcKind.WeaponBasic && w.BasicMp) v *= Pct(T(d.kMpSkill));
             if (w.Ss != null)
             {
                 if (s.Kind == SrcKind.WeaponSpecial) v *= SsSpecialFactor();
@@ -235,20 +253,32 @@ public partial class SephiriaToolbox
                 if (s.Kind is SrcKind.WeaponBasic or SrcKind.WeaponDash && w.Eclipse)
                 {
                     EclipseState(out var fwd, out var share);
-                    eclipseShare = share;
                     if (share > 0)
                     {
                         v *= Pct(T(d.kFwd) + fwd) / Pct(T(d.kFwd));
-                        v *= 1 + share * T(d.Eco.kFsDmg) / 100.0;
+                        if (s.Kind == SrcKind.WeaponBasic)
+                        {
+                            eclipseShare = share;
+                            v *= 1 + share * T(d.Eco.kFsDmg) / 100.0;
+                            if (w.Kt != null) v *= 1 + share * (w.Kt.EclipseBasic - 1);
+                        }
                     }
                 }
                 if (s.Kind == SrcKind.WeaponSpecial)
                 {
                     if (T(w.kEvaSheath) > 0) v *= Pct(Math.Floor(Math.Max(0, T(w.kEvasion)) / (100.0 * w.SheathRangePer)));
                     if (w.CloudSlash && d.Eco != null) v *= Pct(w.CloudSlashPerStack * CloudSlashStacks()) * Pct(T(d.Eco.kCloudDmg));
+                    v *= KtSpecialFactor();
                 }
+                else if (s.Kind == SrcKind.WeaponBasic) v *= KtBasicFactor(s);
+                else if (s.Kind == SrcKind.WeaponDash) v *= KtDashFactor(s);
             }
             if (w.Qs != null && s.Kind == SrcKind.WeaponBasic) v *= QsBasicFactor(s);
+            if (w.Qs != null && w.Qs.FlameSpear && s.Kind == SrcKind.WeaponSpecial && d.Eco != null)
+            {
+                v *= QsFlameSpearFactor();
+                eclipseShare = 1;
+            }
             if (w.Xb != null && s.Kind == SrcKind.WeaponSpecial)
                 v *= w.Xb.Type == 4 ? XbShotFactor(s) : XbSpecialFactor();
             if (w.Dg != null)

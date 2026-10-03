@@ -21,6 +21,7 @@ public partial class SephiriaToolbox
         public double CapAsMul = 1;
         public double Cost0, PoolPeriod, Dps, Reserved;
         public int kCostRed = -1, kSpecCostRed = -1, kRegen = -1, kResonance = -1, kSteal = -1;
+        public double GuardRed, PerfectRed;
     }
 
     double SweepDps(PlayerAvatar a)
@@ -28,6 +29,8 @@ public partial class SephiriaToolbox
         try { if (runCombatTime >= 20) return a.dealsStatistics.Values.Sum() / runCombatTime; } catch { }
         return 0;
     }
+
+    static double MpGain(UnitAvatar a) => a == null ? 1 : Math.Max(0, 1 + a.GetCustomStatUnsafe("MPREGENMULTIPLE") / 100.0);
 
     static double SweepRate(double cost, double regenStat, double resonance, double stealPermille, double dps, double pool, double poolPeriod,
                             double net = 0, double otherUses = 0, double cap = SweepCap)
@@ -44,11 +47,28 @@ public partial class SephiriaToolbox
     static double SweepCost(double cost0, double sweepRed, double specRed) =>
         Math.Floor(Math.Floor(Math.Max(0, cost0 * (1 - sweepRed / 100.0))) * Math.Max(0, 1 - specRed / 100.0));
 
+    static double SweepBuffReduction(CharacterBuff prefab)
+    {
+        if (prefab == null) return 0;
+        double v = 0;
+        foreach (var (key, mode, value) in BuffStats(prefab)) if (mode == 0 && key == "SWEEPCOSTREDUCTION") v += value;
+        return v;
+    }
+
+    static double ActiveSweepBuff(PlayerAvatar a, CharacterBuff prefab)
+    {
+        if (prefab == null || string.IsNullOrEmpty(prefab.ID)) return 0;
+        if (BuffsField?.GetValue(a) is not Dictionary<string, CharacterBuff> buffs || !buffs.TryGetValue(prefab.ID, out var active) || active == null) return 0;
+        return SweepBuffReduction(prefab) * active.Amplified * active.CurrentStack;
+    }
+
     double SweepRateByMp(PlayerAvatar a, WeaponSimple_SwordAndShield ss, double poolPeriod, out double cost)
     {
-        cost = SweepCost(ss.sweepMpCost, a.GetCustomStat(ECustomStat.SweepCostReduction), a.GetCustomStatUnsafe("SPECIALATTACKCOSTREDUCTION"));
+        var live = a.GetComponent<WeaponControllerSimple>()?.currentWeapon as WeaponSimple_SwordAndShield;
+        double buffNow = live != null ? ActiveSweepBuff(a, live.buffPrefab) + ActiveSweepBuff(a, live.perfectGuardBuffPrefab) : 0;
+        cost = SweepCost(ss.sweepMpCost, a.GetCustomStat(ECustomStat.SweepCostReduction) - buffNow, a.GetCustomStatUnsafe("SPECIALATTACKCOSTREDUCTION"));
         if (a.GetCustomStatUnsafe("INFINITYMP") > 0) return SweepCap;
-        return SweepRate(cost, a.GetCustomStatUnsafe("MPREGEN"), a.GetCustomStatUnsafe("MPRESONANCE"), a.GetCustomStat(ECustomStat.MPSteal),
+        return SweepRate(cost, a.GetCustomStatUnsafe("MPREGEN") * MpGain(a), a.GetCustomStatUnsafe("MPRESONANCE"), a.GetCustomStat(ECustomStat.MPSteal) * MpGain(a),
                          SweepDps(a), a.MaxMp - a.reservedMp, poolPeriod);
     }
 

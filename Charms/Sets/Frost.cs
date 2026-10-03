@@ -5,24 +5,45 @@ using UnityEngine;
 
 public partial class SephiriaToolbox
 {
+    const double ScythePassSeconds = 0.514;
+
     static void RegisterFrost()
     {
         CharmMechs["Charm_AirSlash"] = new() { Trig = Trig.Charge, AmpKey = "CHARGINGCHARMAMPLIFY", Note = Tr("trigger.fires_sword_wave_normal") };
 
-        CharmMechs["Charm_Guillotine"] = new() { Trig = Trig.Periodic, Base = 1f / 6f, Per = 2.5f, HasteKey = "CHARGINGCHARMBONUS", AmpKey = "CHARGINGCHARMAMPLIFY", Note = Tr("trigger.summons_blades_every_6") };
+        CharmMechs["Charm_Guillotine"] = new() { Trig = Trig.Periodic, Base = 1f / 6f, HasteKey = "CHARGINGCHARMBONUS", AmpKey = "CHARGINGCHARMAMPLIFY", Note = Tr("trigger.summons_blades_every_6") };
         Extra<Charm_Guillotine>((s, c, b, key, levels, baseRate, swingHits) =>
         {
             var g = (Charm_Guillotine)c;
+            if (g.triggerCooldown > 0) s.TheoryK *= 6 / g.triggerCooldown;
+            double hits = Math.Max(1, Math.Min(g.bladeTargetCount, b.Enemies)), hitsM = Math.Max(1, Math.Min(g.bladeTargetCount, b.EnemiesM));
+            s.TheoryK *= hits;
+            s.MultiScale = hitsM / hits;
             if (g.shockCooldownReduction > 0 && g.triggerCooldown > 0)
                 AddX(s, new XMod { Kind = XKind.ElecCdr, Key = key("CHARGINGCHARMBONUS"), A = g.shockCooldownReduction, B = g.triggerCooldown });
         });
 
-        CharmMechs["Charm_IceBow"] = new() { Trig = Trig.Charge, Per = 6f, HasteKey = "CHARGINGCHARMBONUS", AmpKey = "CHARGINGCHARMAMPLIFY", Note = Tr("trigger.fires_volley_arrows_after") };
+        CharmMechs["Charm_IceBow"] = new() { Trig = Trig.Charge, AmpKey = "CHARGINGCHARMAMPLIFY", Note = Tr("trigger.fires_volley_arrows_after") };
+        Extra<Charm_IceBow>((s, c, b, key, levels, baseRate, swingHits) =>
+        {
+            var bow = (Charm_IceBow)c;
+            double reload = Math.Max(0.05, bow.arrowReloadTime), gap = Math.Max(0, bow.fireInterval);
+            s.TheoryK = 1 / (reload + gap);
+            s.MultiScale = 1;
+            s.PerUse = Math.Max(1, bow.arrowReloadLimit);
+            s.HasteKey = -1;
+            s.HasteKey2 = -1;
+            AddX(s, new XMod { Kind = XKind.HasteFixed, Key = key("CHARGINGCHARMBONUS"), A = reload, B = gap });
+        });
 
         CharmMechs["Charm_IceHammer"] = new() { Trig = Trig.Charge, AmpKey = "CHARGINGCHARMAMPLIFY", Note = Tr("trigger.throws_hammer_when_dashing") };
         Extra<Charm_IceHammer>((s, c, b, key, levels, baseRate, swingHits) =>
         {
-            AddX(s, new XMod { Kind = XKind.RateAddIf, Key = key("DASHATTACKICEHAMMER"), A = PlayDash * 0.6 / baseRate });
+            AddX(s, new XMod { Kind = XKind.RateAddIf, Key = key("DASHATTACKICEHAMMER"), A = buildDash * 0.6 / baseRate });
+            var scythe = ((Charm_IceHammer)c).bulletPrefab_Scythe;
+            var move = scythe != null ? scythe.GetComponent<BulletMoveModule>() : null;
+            double life = move != null && move.destroyOnTime && move.destroyTimer != null ? move.destroyTimer.time : 6;
+            AddX(s, new XMod { Kind = XKind.DmgIf, Key = key("ICEHAMMERSCYTHE"), A = Math.Max(1, life / ScythePassSeconds * 0.8) });
         });
 
         CharmMechs["Charm_IceSpear"] = new() { Trig = Trig.Charge, CountBy = "fireCountByLevel", AmpKey = "CHARGINGCHARMAMPLIFY", Note = Tr("trigger.spear_attack_when_fully") };

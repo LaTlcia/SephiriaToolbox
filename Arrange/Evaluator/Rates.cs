@@ -13,7 +13,7 @@ public partial class SephiriaToolbox
     sealed partial class Evaluator
     {
         double AsFactor() => SwingAs();
-        double SwingAs() => d.Weapon.Crossbow ? d.Weapon.AsNow * CrossbowRate() / Math.Max(1e-6, d.Weapon.XbRateNow) : WeaponAs();
+        double SwingAs() => d.Weapon.Crossbow ? d.Weapon.AsNow * CrossbowRate() / Math.Max(1e-6, d.Weapon.XbRateNow) : SwingCurve(WeaponAs(), d.Weapon.SwingFixed);
         double WeaponAs()
         {
             double fixedAs = T(d.kFixedAs);
@@ -26,6 +26,7 @@ public partial class SephiriaToolbox
         double RateFactor(DpsSource s, int idx, bool rateOnly = false)
         {
             double f = s.SwingBased ? AsFactor() : 1;
+            double fHits = f;
             switch (s.StatRate)
             {
                 case RateStat.AttackSpeed:
@@ -41,16 +42,31 @@ public partial class SephiriaToolbox
                 {
                     double casts = 0;
                     foreach (var o in d.Sources) if (o.Kind == SrcKind.Magic) casts += magicRate[o.Item];
-                    f *= s.StatCap > 0 ? Math.Min(casts, s.StatCap) : casts;
+                    foreach (var mb in d.MagicBuffs) casts += magicRate[mb.Item];
+                    if (s.StatCap > 0) casts = Math.Min(casts, s.StatCap);
+                    if (s.DirectCap > 0) casts = Math.Min(casts, s.DirectCap * WeaponHits());
+                    f *= casts;
                     break;
                 }
                 case RateStat.DarkCloud:
                     f *= Math.Max(0, 1 + (s.RateKeyA >= 0 ? T(s.RateKeyA) : 0) / 100.0 + (s.RateKeyB >= 0 ? T(d.kAs) * T(s.RateKeyB) / 10000.0 : 0));
                     break;
             }
-            if (s.Summon) f *= Pct(T(d.kFollowerAs) + T(d.kFollowerAs2));
+            if (s.Summon)
+            {
+                double asf = Pct(T(d.kFollowerAs) + T(d.kFollowerAs2));
+                f *= s.SummonWait > 0 ? (s.SummonWait + s.SummonFixed) / (s.SummonWait / Math.Max(0.1, asf) + s.SummonFixed) : asf;
+            }
             if (s.HasteKey >= 0) f *= Pct(T(s.HasteKey));
             if (s.HasteKey2 >= 0) f *= Pct(T(s.HasteKey2));
+            if (s.CdSeconds > 0)
+            {
+                var lv = RateOf(s);
+                double h = (Single ? s.CdBase : s.CdBaseM) * fHits;
+                double p = s.CdChance * (lv != null ? SafeAt(lv, idx) : 1) * (fHits > 1e-9 ? f / fHits : 1);
+                if (p > 1) { f /= p; p = 1; }
+                f /= 1 + Math.Max(0, p) * Math.Max(0, s.CdSeconds * h - 0.5);
+            }
             if (s.X != null) f *= XFactor(s, idx, rateOnly);
             if (s.AmpKey >= 0) f *= 1 + Math.Max(0, T(s.AmpKey));
             return f;
@@ -68,8 +84,17 @@ public partial class SephiriaToolbox
             if (d.kInfMp >= 0 && T(d.kInfMp) > 0) return cap;
             double cost = SweepCost(sw.Cost0, T(sw.kCostRed), T(sw.kSpecCostRed));
             double net = 0, uses = 0;
-            if (others) net = OtherMpUse(out uses) - MpHealIncome();
-            return SweepRate(cost, T(sw.kRegen), T(sw.kResonance), T(sw.kSteal), sw.Dps, MaxMp() - sw.Reserved, sw.PoolPeriod, net, uses, cap);
+            if (others)
+            {
+                net = OtherMpUse(out uses) - MpHealIncome() * d.MpGain;
+                if ((sw.GuardRed > 0 || sw.PerfectRed > 0) && d.GuardRate > 0)
+                {
+                    double perfect = Math.Min(d.GuardRate, Math.Max(0, d.PerfectGuardRate)), normal = d.GuardRate - perfect;
+                    double red = T(sw.kCostRed), spec = T(sw.kSpecCostRed);
+                    net -= normal * (cost - SweepCost(sw.Cost0, red + sw.GuardRed, spec)) + perfect * (cost - SweepCost(sw.Cost0, red + sw.PerfectRed, spec));
+                }
+            }
+            return SweepRate(cost, T(sw.kRegen) * d.MpGain, T(sw.kResonance), T(sw.kSteal) * d.MpGain, sw.Dps, MaxMp() - sw.Reserved, sw.PoolPeriod, net, uses, cap);
         }
 
         double SweepNow(bool others = true) => d.Sweep.Mode == 1 ? SsCloudSweepRate() : SweepRateNow(others);
@@ -104,18 +129,27 @@ public partial class SephiriaToolbox
             bool blocked = d.kBlockMagic >= 0 && T(d.kBlockMagic) > 0;
             double k = FinalComboCdr();
             double swings = d.Weapon.BoltSwing > 0 ? d.Weapon.BoltSwing * StatAs() : 0, supply = 0;
+            double evCd = d.kEvCd >= 0 ? T(d.kEvCd) : 0, evade = evCd > 0 ? EvadeRate() * evCd / 100.0 : 0;
             int books = 0;
             foreach (var s in d.Sources)
                 if (s.Kind == SrcKind.Magic)
                 {
                     int i = s.Item;
-                    double regen = CdRate(Pct(cdr + extraCdr[i]) / s.Cooldown, k);
+                    double regen = CdRate(Pct(cdr + extraCdr[i]) / s.Cooldown + evade, k);
                     bool bolt = swings > 0 && d.Extra[i].BoltMagic && ItemOn[i];
-                    manualRate[i] = blocked || bolt || !ItemOn[i] ? 0 : regen + (L > 0 ? 1 / L : 0);
-                    boltRate[i] = bolt ? regen + (L > 0 ? s.Ammo / L : 0) : 0;
+                    double opening = L > 0 ? s.Ammo / L : 0;
+                    manualRate[i] = blocked || bolt || !ItemOn[i] ? 0 : regen + opening;
+                    boltRate[i] = bolt ? regen + opening : 0;
                     boltSet[i] = !bolt;
                     if (bolt) { supply += boltRate[i]; books++; }
                 }
+            foreach (var mb in d.MagicBuffs)
+            {
+                int i = mb.Item;
+                manualRate[i] = blocked || !ItemOn[i] ? 0 : CdRate(Pct(cdr + extraCdr[i]) / mb.Cooldown + evade, k) + (L > 0 ? mb.Ammo / L : 0);
+                boltRate[i] = 0;
+                magicRate[i] = manualRate[i];
+            }
             if (books > 0 && swings < supply)
             {
                 double left = swings;
@@ -137,9 +171,36 @@ public partial class SephiriaToolbox
                 foreach (var s in d.Sources)
                     if (s.Kind == SrcKind.Magic && !boltSet[s.Item]) boltRate[s.Item] = even;
             }
+            DpsSource dupBook = null;
+            double dup = 0;
+            if (d.Weapon.Dg != null && d.Weapon.Dg.DupMagic)
+            {
+                double manual = 0, bestValue = 0;
+                foreach (var s in d.Sources)
+                {
+                    if (s.Kind != SrcKind.Magic || !ItemOn[s.Item] || manualRate[s.Item] <= 0) continue;
+                    manual += manualRate[s.Item];
+                    double v = MagicCastValue(s);
+                    if (dupBook == null || v > bestValue) { dupBook = s; bestValue = v; }
+                }
+                dup = Math.Min(DgFuryRate(), manual);
+            }
             foreach (var s in d.Sources)
                 if (s.Kind == SrcKind.Magic)
-                    magicRate[s.Item] = ItemOn[s.Item] ? manualRate[s.Item] + autoRate[s.Item] + boltRate[s.Item] : 0;
+                {
+                    dupRate[s.Item] = s == dupBook ? dup : 0;
+                    magicRate[s.Item] = ItemOn[s.Item] ? manualRate[s.Item] + autoRate[s.Item] + boltRate[s.Item] + dupRate[s.Item] : 0;
+                }
+        }
+
+        double MagicCastValue(DpsSource s)
+        {
+            int idx = Math.Min(Math.Max(ItemLevel[s.Item], 0), m.Items[s.Item].MaxLevel);
+            double baseDmg = 1;
+            if (s.Default != null || s.Percent != null)
+                baseDmg = SafeAt(s.Default, idx) + (s.RelKey != null ? StatOf(s.RelKey) : 0) * SafeAt(s.Percent, idx) / 100.0;
+            var rate = RateOf(s);
+            return baseDmg * (rate != null ? SafeAt(rate, idx) : 1) * (1 + boost[s.Item] / 100.0) * (s.K > 0 ? s.K : 1);
         }
 
         static double CdRate(double r0, double k) => k > 1e-9 && r0 > 1e-9 ? k / Math.Log(1 + k / r0) : r0;
@@ -155,7 +216,7 @@ public partial class SephiriaToolbox
         {
             double L = FightLen();
             if (L <= 0 || !s.FirstFree) return 1;
-            double uses = HitRate(s) / Math.Max(1e-9, s.PerUse);
+            double uses = UseRate(s);
             return uses > 1e-9 ? 1 + 1 / (L * uses) : 1;
         }
     }

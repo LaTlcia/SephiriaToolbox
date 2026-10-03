@@ -91,7 +91,7 @@ public partial class SephiriaToolbox
             Trig.DirectHit => (swing * b.SwingHit + b.Special + b.DashAttack) * hps,
             Trig.DirectOrMagic => (swing + b.Special + b.DashAttack) * hps + 0.3,
             Trig.Special => b.Special,
-            Trig.Dash => PlayDash,
+            Trig.Dash => buildDash,
             Trig.Parry => b.Parry,
             Trig.Guard => b.Guard,
             Trig.Evade => 1,
@@ -115,7 +115,7 @@ public partial class SephiriaToolbox
             }
             float extra = mech.ExtraField != null && TimerSeconds(c, mech.ExtraField) > 0 ? TimerSeconds(c, mech.ExtraField) : mech.TimerExtra;
             baseRate = t > 0 ? 1.0 / (t + extra) : mech.Base > 0 ? mech.Base : 1;
-            if (t > 0 && mech.DashCdField != null) baseRate *= 1 + Num(c, mech.DashCdField) * PlayDash;
+            if (t > 0 && mech.DashCdField != null) baseRate *= 1 + Num(c, mech.DashCdField) * buildDash;
             if (mech.Trig == Trig.Active && s.Rate != null && TimerSeconds(c, mech.TimerField) <= 0) baseRate = 1;
             baseRateM = baseRate;
         }
@@ -129,7 +129,6 @@ public partial class SephiriaToolbox
                     s.HasteKey = cc.airSlashCooldownBonus ? key("AIRSLASHHASTE") : cc.voluspaCooldownBonus ? key("VOLUSPAHASTE") : -1;
             }
             baseRate = 1.0 / charge;
-            if (c is Charm_IceBow) baseRate = Math.Min(mech.Per / charge, 2.0) / mech.Per;
             baseRateM = baseRate;
             if (FieldValue(c, "chargingCharm") is ChargingCharm && mech.HasteKey != "CHARGINGCHARMBONUS") s.HasteKey2 = key("CHARGINGCHARMBONUS");
         }
@@ -138,8 +137,18 @@ public partial class SephiriaToolbox
         if (cap > 0)
         {
             if (c is Charm_FrostiumRing) (s.X ??= new List<XMod>()).Add(new XMod { Kind = XKind.ArrFast, A = baseRate, B = cap });
-            baseRate = Math.Min(baseRate, cap);
-            baseRateM = Math.Min(baseRateM, cap);
+            if (mech.Trig == Trig.Crit || mech.ChanceBy != null || mech.Stat is RateStat.Luck or RateStat.Crit)
+            {
+                s.CdSeconds = 1 / cap;
+                s.CdBase = baseRate;
+                s.CdBaseM = baseRateM;
+                s.CdChance = mech.Weight ? b.AttackWeight : 1;
+            }
+            else
+            {
+                baseRate = Math.Min(baseRate, cap);
+                baseRateM = Math.Min(baseRateM, cap);
+            }
         }
         double per = mech.Per;
         if (mech.Weight) per *= b.AttackWeight;
@@ -166,48 +175,5 @@ public partial class SephiriaToolbox
         if (mech.Trig == Trig.Evade) (s.X ??= new List<XMod>()).Add(new XMod { Kind = XKind.EvadeRate });
         if (mech.Trig == Trig.Summon) s.Summon = true;
         s.Note = mech.Note;
-    }
-
-    static bool ApplyMagicMech(DpsSource s, ActiveSkill skill, Behavior b, int levels, int multiCast)
-    {
-        float hitsPerCast = 1;
-        float[] byLevel = null;
-        bool known = true;
-        float chainM = 1;
-        switch (skill)
-        {
-            case ActiveSkill_LightningArmor:
-            {
-                s.Default ??= ReadFloats(skill, "damagesByLevel");
-                s.RelKey ??= "LIGHTNINGDAMAGE";
-                float duration = TimerSeconds(skill, "durationTimer"), tick = TimerSeconds(skill, "damageTickTimer");
-                hitsPerCast = (duration > 0 && tick > 0 ? duration / tick : 30) * (float)Math.Min(3, b.Enemies);
-                chainM = (float)(Math.Min(3, b.EnemiesM) / Math.Max(1e-6, Math.Min(3, b.Enemies)));
-                s.Note = Tr("trigger.lasts_s_chain_lightning", duration, tick);
-                break;
-            }
-            case ActiveSkill_Ball:
-                hitsPerCast = 8;
-                break;
-            case ActiveSkill_LightningBoomerang:
-                hitsPerCast = 1.5f;
-                break;
-            case ActiveSkill_Summon:
-            case ActiveSkill_CallLightning:
-            case ActiveSkill_FireBulletsToEnemies:
-            case ActiveSkill_WhirlWind:
-                known = false;
-                break;
-            default:
-                byLevel = LevelTable(skill, "numberOfMeteorsByLevel");
-                if (byLevel == null && FieldValue(skill, "bulletCount") is int bc && bc > 1) hitsPerCast = bc;
-                break;
-        }
-        var hits = Enumerable.Repeat(hitsPerCast * Math.Max(1, multiCast), levels).ToArray();
-        if (byLevel != null) MulLevels(hits, byLevel, v => Math.Max(1f, v));
-        s.Rate = hits.Any(v => Math.Abs(v - 1f) > 1e-6f) ? hits : null;
-        s.RateM = Math.Abs(chainM - 1f) > 1e-6f ? hits.Select(v => v * chainM).ToArray() : null;
-        if (s.Default == null && s.Percent == null) known = false;
-        return known;
     }
 }

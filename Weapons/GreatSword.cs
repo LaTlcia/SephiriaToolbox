@@ -182,7 +182,7 @@ public partial class SephiriaToolbox
         double cost0 = Math.Max(0, gs.sweepCost - gs.sweepCost * gs.sweepCostBonus / 100.0);
         double cost = Math.Floor(cost0 * Math.Max(0, 1 - avatar.GetCustomStatUnsafe("SPECIALATTACKCOSTREDUCTION") / 100.0));
         double rate = avatar.GetCustomStatUnsafe("INFINITYMP") > 0 ? cap
-            : SweepRate(cost, avatar.GetCustomStatUnsafe("MPREGEN"), avatar.GetCustomStatUnsafe("MPRESONANCE"), avatar.GetCustomStat(ECustomStat.MPSteal),
+            : SweepRate(cost, avatar.GetCustomStatUnsafe("MPREGEN") * MpGain(avatar), avatar.GetCustomStatUnsafe("MPRESONANCE"), avatar.GetCustomStat(ECustomStat.MPSteal) * MpGain(avatar),
                         SweepDps(avatar), avatar.MaxMp - avatar.reservedMp, poolPeriod, cap: cap);
         d.SweepCost = cost;
         play.SweepCost = cost;

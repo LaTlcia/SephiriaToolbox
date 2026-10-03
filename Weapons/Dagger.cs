@@ -18,6 +18,8 @@ public partial class SephiriaToolbox
         public bool FuryMp;
         public double FuryMpPer = 8, FuryMpMin = 5, FuryMpBonus = 5, FuryMpPct = 100;
         public bool ParryUsesMp = true, FuryUsesMp;
+        public bool DupMagic;
+        public int kFsFury = -1;
         public bool BladeZone;
         public double ZoneMult, ZoneAsPer = 30, ZoneStep = 7, DashMultNormal = 1;
     }
@@ -58,6 +60,12 @@ public partial class SephiriaToolbox
                      .FirstOrDefault(x => x != null && string.Equals(x.changeWeaponActionName, "FURY", StringComparison.OrdinalIgnoreCase));
         var furyFd = over != null && over.fireData != null ? over.fireData : At(sp, lightning ? 4 : 0) ?? At(sp, 0);
         g.FuryMult = HitMult(furyFd);
+        if (furyFd is NewWeaponFireData_SpecialProjectile dsp && dsp.projectilePrefab != null && dsp.projectilePrefab.GetComponent<SpecialProjectile_DuplicateMagic>() != null)
+        {
+            g.DupMagic = true;
+            g.FuryMult = 0;
+        }
+        g.kFsFury = K("FLAMESWORDFURY");
         w.SpecialMp = false;
         g.ParryUsesMp = !(dg.freeParry || HasAddon<WeaponAddonDagger_FreeParry>(dg));
         g.FuryUsesMp = over != null && (over.newActionParameter ?? "").IndexOf("MP=", StringComparison.Ordinal) >= 0;

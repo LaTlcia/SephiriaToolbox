@@ -17,11 +17,17 @@ public partial class SephiriaToolbox
 
         CharmMechs["Charm_PallasCard"] = new() { Trig = Trig.Swing, Stat = RateStat.Luck, Weight = true, Per = 1.2f, CapTimer = "throwIntervalTimer", Note = Tr("trigger.chance_throw_card_weapon") };
 
-        PassiveDefs["Charm_SpeedRun"] = P(new PassiveDef
-        {
-            Kind = PKind.Stat, Key = "ATTACKSPEED", By = "attackSpeedByLevel", Uptime = (float)UpFloorStart,
-            CurFunc = (c, a) => Num(c, "buffEnabled") > 0 ? SafeAt(LevelTable(c, "attackSpeedByLevel"), c.CurrentLevelToIdx()) : 0
-        });
+        PassiveDefs["Charm_SpeedRun"] = P(
+            new PassiveDef
+            {
+                Kind = PKind.Stat, Key = "ATTACKSPEED", By = "attackSpeedByLevel", Uptime = (float)UpFloorStart,
+                CurFunc = (c, a) => Num(c, "buffEnabled") > 0 ? SafeAt(LevelTable(c, "attackSpeedByLevel"), c.CurrentLevelToIdx()) : 0
+            },
+            new PassiveDef
+            {
+                Kind = PKind.Stat, Key = MoveSpeedKey, By = "speedByLevel", Uptime = (float)UpFloorStart,
+                CurFunc = (c, a) => Num(c, "buffEnabled") > 0 ? SafeAt(LevelTable(c, "speedByLevel"), c.CurrentLevelToIdx()) : 0
+            });
 
         PassiveDefs["Charm_TheFlagOfCheer"] = P(new PassiveDef
         {

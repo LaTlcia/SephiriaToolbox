@@ -117,6 +117,7 @@ public partial class SephiriaToolbox : MonoBehaviour
         t0 = PerfStart();
         try { TrackSwings(); } catch (Exception e) { WarnOnce("出手速度", e); }
         try { TrackSpecials(); } catch (Exception e) { WarnOnce("特殊攻击次数", e); }
+        try { TrackDashes(); } catch (Exception e) { WarnOnce("冲刺次数", e); }
         try { TrackDefends(); TrackGuardHold(); } catch (Exception e) { WarnOnce("格挡 / 弹反", e); }
         try { TrackBosses(); } catch (Exception e) { WarnOnce("Boss 战", e); }
         try { TrackBattles(); } catch (Exception e) { WarnOnce("战斗长度", e); }

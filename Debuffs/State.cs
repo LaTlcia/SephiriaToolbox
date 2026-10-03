@@ -38,6 +38,8 @@ public partial class SephiriaToolbox
                     return d.Eco != null ? CloudStrikes() : 0;
                 case SrcKind.Ability when s.Eco == EcoKind.FlameSword:
                     return d.Eco != null ? FsSwords() : 0;
+                case SrcKind.Ability when s.Relic:
+                    return (s.K > 0 ? s.K : s.TheoryK > 0 ? s.TheoryK : s.Prior) * RateFactor(s, 0, rateOnly: true);
             }
             return 0;
         }

@@ -11,10 +11,10 @@ public partial class SephiriaToolbox
     {
         var e = d.Eco = new EcoModel { Battle = play.Single && d.FightLen > 0 ? d.FightLen : BattleLength(), Enemies = play.EnemiesM };
         var weapon = ModelWeapon(avatar);
-        bool melee = weapon == null || !(weapon.weaponType is EWeaponType.Crossbow or EWeaponType.StaffMagic or EWeaponType.Golem);
+        bool melee = !RangedWeapon(weapon);
         double swingHits = play.Swing * play.SwingHit * play.HitsPerSwing;
         double otherHits = (play.Special + play.DashAttack + play.Strike) * play.HitsPerSwing;
-        double asNow = AttackSpeedFactor(avatar.GetCustomStat(ECustomStat.AttackSpeed), WeaponAsAmp(weapon));
+        double asNow = SwingSpeedNow(avatar, weapon);
         double combatSec = runCombatTime;
         double MeasuredDps(params string[] ids)
         {
@@ -45,7 +45,7 @@ public partial class SephiriaToolbox
                 float rs = TimerSeconds(dc, "darkCloudGainDuringCombat");
                 if (rs > 0) e.CloudRestoreSec = rs;
             }
-            double lightningFollowers = sources.Count(x => x.Summon && MainElement(x.Ids, measuredIds) == 3) * PlaySummon;
+            double lightningFollowers = sources.Where(x => x.Summon && MainElement(x.Ids, measuredIds) == 3).Sum(x => x.SummonWait > 0 ? 1 / (x.SummonWait + x.SummonFixed) : PlaySummon);
             double weaponDps = MeasuredDps("Weapon_BasicAttack", "Weapon_DashAttack");
             for (int i = 0; i < charmOf.Length; i++)
             {
@@ -66,7 +66,8 @@ public partial class SephiriaToolbox
                         {
                             var cd = LevelTable(c, "cooldownByLevel");
                             var cl = LevelTable(c, "cloudByLevel");
-                            if (cl != null) e.CloudGen.Add(new Feeder { Item = i, PerSec = Per(L, l => SafeAt(cl, l) / (SafeAt(cd, l) + 1 / PlayDash)) });
+                            double dashHits = play.DashAttack * play.HitsPerSwing;
+                            if (cl != null && dashHits > 0) e.CloudGen.Add(new Feeder { Item = i, PerSec = Per(L, l => SafeAt(cl, l) / (SafeAt(cd, l) + 1 / dashHits)) });
                             break;
                         }
                         case Charm_LightningBread:
@@ -97,7 +98,9 @@ public partial class SephiriaToolbox
                         case Charm_MiniBallista:
                         {
                             var pc = LevelTable(c, "addCloudPercentByLevel");
-                            if (pc != null) e.CloudGen.Add(new Feeder { Item = i, PerSec = Per(L, l => PlaySummon * SafeAt(pc, l) / 100.0) });
+                            var bullets = LevelTable(c, "bulletCountByLevel");
+                            double shots = SummonCadence(((Charm_MiniBallista)c).unitPrefab, out double bw, out double bf) ? 1 / (bw + bf) : PlaySummon;
+                            if (pc != null) e.CloudGen.Add(new Feeder { Item = i, PerSec = Per(L, l => shots * Math.Max(1, bullets != null ? SafeAt(bullets, l) : 1) * SafeAt(pc, l) / 100.0) });
                             break;
                         }
                         case Charm_Lightning_BasicAttack:
@@ -360,7 +363,7 @@ public partial class SephiriaToolbox
                 play.MpPerSec += cdr / cm.ContainedMagic.cooldownTime * Math.Max(0, cost);
             }
         if (play.SpecialByMp) play.MpPerSec += play.Special * Math.Max(0, play.SweepCost);
-        double asf = AttackSpeedFactor(avatar.GetCustomStat(ECustomStat.AttackSpeed), WeaponAsAmp(weapon));
+        double asf = SwingSpeedNow(avatar, weapon);
         double hits = (play.Swing * play.SwingHit * asf + play.Special + play.DashAttack + play.Strike) * play.HitsPerSwing;
         bool phys = weapon != null && weapon.basicComboAttacks != null
                     && weapon.basicComboAttacks.Any(a => a != null && a.damageElementalType == EDamageElementalType.Physical);

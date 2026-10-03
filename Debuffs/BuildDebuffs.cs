@@ -161,7 +161,13 @@ public partial class SephiriaToolbox
                         var skill = cmg.ContainedMagic != null && cmg.ContainedMagic.magicPrefab != null ? cmg.ContainedMagic.magicPrefab.GetComponent<ActiveSkill>() : null;
                         var db = skill != null ? DebuffFieldOf(skill, typeof(ActiveSkill)) : null;
                         if (db == null || !db.CompareID(DebuffIds[t])) continue;
-                        di.Appliers.Add(new DebuffApplier { Kind = 2, Item = s.Item, Src = si, Name = m.Items[s.Item].Name });
+                        float per = skill switch
+                        {
+                            ActiveSkill_Arrow ar => Math.Max(0, ar.debuffStack),
+                            ActiveSkill_ArrowRain rain => Math.Min(100, Math.Max(0, rain.debuffPercent)) / 100f,
+                            _ => 1f
+                        };
+                        di.Appliers.Add(new DebuffApplier { Kind = 2, Item = s.Item, Src = si, ChanceTable = Math.Abs(per - 1f) > 1e-6f ? new[] { per } : null, Name = m.Items[s.Item].Name });
                     }
                     catch (Exception e) { WarnOnce("减益施加 " + m.Items[s.Item].Name, e); }
                 }

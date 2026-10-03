@@ -26,7 +26,9 @@ public partial class SephiriaToolbox
         ElecCdr,
         ExtraTriggers,
         EvadeRate,
-        MaxMpMul
+        MaxMpMul,
+        SpinFloor,
+        HasteFixed
     }
 
     sealed class XMod
@@ -85,6 +87,12 @@ public partial class SephiriaToolbox
                     case XKind.RatePctIf:
                         if (T(x.Key) > 0) f *= Pct(T(x.Key2));
                         break;
+                    case XKind.SpinFloor:
+                        if (T(x.Key) > 0) f *= Math.Max(x.A * Pct(T(d.kAs)), x.B) / Math.Max(1e-6, Math.Max(x.A, x.B));
+                        break;
+                    case XKind.HasteFixed:
+                        f *= (x.A + x.B) / (x.A / Math.Max(0.01, Pct(T(x.Key))) + x.B);
+                        break;
                     case XKind.RateAddIf:
                         if (T(x.Key) > 0) f *= 1 + x.A;
                         break;
@@ -104,7 +112,7 @@ public partial class SephiriaToolbox
                     {
                         double v = T(x.Key);
                         if (v <= 0) break;
-                        double speed = 1 + (x.C * WeaponAs() + x.D) * v / 10.0;
+                        double speed = 1 + (x.C * SwingAs() + x.D) * v / 10.0;
                         f *= (x.A + x.B) / (x.A / speed + x.B);
                         break;
                     }
@@ -128,8 +136,12 @@ public partial class SephiriaToolbox
                         break;
                     }
                     case XKind.Planet:
-                        f *= Pct(T(x.Key)) + (T(x.Key2) > 0 ? (x.B * WeaponAs() + x.C) * x.A : 0);
+                    {
+                        double tick = Math.Max(0.01, Pct(T(x.Key))) / x.A, push = T(x.Key2) > 0 ? x.B * SwingAs() + x.C : 0;
+                        double round = x.D + Math.Max(0, 1 - x.D * push) / (tick + push);
+                        f *= (x.A + x.D) / Math.Max(1e-6, round);
                         break;
+                    }
                     case XKind.ArrFast:
                         if (s.Item >= 0 && arrFast[s.Item] && x.B > 0) f *= Math.Min(x.A, 3 * x.B) / Math.Max(1e-9, Math.Min(x.A, x.B));
                         break;
@@ -153,7 +165,7 @@ public partial class SephiriaToolbox
                         f *= EvadeRate();
                         break;
                     case XKind.ExtraTriggers:
-                        f *= 1 + x.A * WeaponAs() + x.B;
+                        f *= 1 + x.A * SwingAs() + x.B;
                         break;
                     case XKind.ElecCdr:
                     {
@@ -170,12 +182,14 @@ public partial class SephiriaToolbox
 
         double RelicFireRate()
         {
-            double sum = 0;
+            double sum = XbRelicFires();
             foreach (var s in d.Sources)
-                if (s.Relic && s.Kind == SrcKind.Proc && s.X?.Any(x => x.Kind == XKind.RelicSwords) != true)
-                    sum += HitRate(s) / Math.Max(1e-6, s.PerUse);
+                if (s.Relic && s.Kind is SrcKind.Proc or SrcKind.Ability && s.X?.Any(x => x.Kind == XKind.RelicSwords) != true)
+                    sum += UseRate(s);
             return sum;
         }
+
+        double UseRate(DpsSource s) => HitRate(s) / Math.Max(1e-6, s.PerUse) / (s.AmpKey >= 0 ? 1 + Math.Max(0, T(s.AmpKey)) : 1);
 
         double ChargeMp(DpsSource s, double v)
         {

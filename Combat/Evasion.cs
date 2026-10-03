@@ -6,6 +6,8 @@ public partial class SephiriaToolbox
     static double EvasionChance(double evasion) =>
         evasion <= 0 ? 0 : Math.Max(0, Math.Log(Math.Min(evasion, 10000) / 6200.0 + 1) * 0.8);
 
+    const double DashDodgeShare = 0.25;
+
     sealed partial class Evaluator
     {
         double EvadeRate()
@@ -19,7 +21,8 @@ public partial class SephiriaToolbox
                 double t = SafeAt(seconds, IdxOf(item));
                 if (t > 0 && attempts > 0) evades += 1 / (t + 1 / attempts);
             }
-            return Math.Min(attempts, evades);
+            double dashDodges = d.kDashEvasion >= 0 && T(d.kDashEvasion) > 0 ? attempts * DashDodgeShare : 0;
+            return Math.Min(attempts, evades) + dashDodges;
         }
     }
 }

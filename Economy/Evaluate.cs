@@ -44,7 +44,7 @@ public partial class SephiriaToolbox
             double multi = Math.Max(1, T(e.kCloudMulti));
             demand = speed / Math.Max(0.1, e.CloudInterval) * multi;
             foreach (var f in e.CloudUse) demand += FeederRate(f) * multi;
-            if (d.Weapon.CloudBottle) demand += d.Weapon.DashAttackRate * d.Weapon.CloudBottlePct / 100.0;
+            if (d.Weapon.CloudBottle) demand += d.Weapon.DashAttackRate * d.Weapon.CloudBottles * d.Weapon.CloudBottlePct / 100.0;
             double keep = Math.Min(Math.Max(T(e.kCloudKeep), 0), 100) / 100.0;
             if (keep >= 0.999) { supply = double.PositiveInfinity; return; }
             double regen = Math.Max(1, Math.Floor(max * e.CloudRestorePct / 100.0)) * Math.Max(0, 1 + T(e.kCloudRestore) / 100.0) / Math.Max(0.1, e.CloudRestoreSec);
@@ -68,18 +68,24 @@ public partial class SephiriaToolbox
             double direct = e.FsHitsSwing * AsFactor() + e.FsHitsOther, magic = 0;
             foreach (var o in d.Sources)
                 if (o.Kind == SrcKind.Magic && ItemOn[o.Item])
-                    magic += magicRate[o.Item] * Math.Min(3, o.Rate != null ? SafeAt(o.Rate, IdxOf(o.Item)) : 1) * MultiCast();
+                {
+                    double hitsPerCast = o.Rate != null ? SafeAt(o.Rate, IdxOf(o.Item)) : 1;
+                    double perCast = o.HitInterval > 0 ? Math.Min(hitsPerCast, 1 + Math.Max(0, hitsPerCast - 1) * Math.Min(1, o.HitInterval / e.FsMinCd)) : Math.Min(3, hitsPerCast);
+                    magic += magicRate[o.Item] * perCast * MultiCast();
+                }
             double relic = 0;
             if (e.kFsRelic >= 0 && T(e.kFsRelic) > 0)
                 foreach (var o in d.Sources)
-                    if (o.Relic && o.Kind == SrcKind.Proc) relic += HitRate(o);
+                    if (o.Relic && o.Kind is SrcKind.Proc or SrcKind.Ability) relic += HitRate(o);
             double all = direct + magic + relic;
             double trig = Math.Min(all, 1 / e.FsMinCd);
             if (trig <= 0) return 0;
             double per = 1 + Math.Max(0, T(e.kFsAdd)) + direct / all * Math.Max(0, T(e.kFsAddW)) + magic / all * Math.Max(0, T(e.kFsAddM));
             double demand = trig * per;
-            if (T(e.kFsPick) > 0) return demand;
             double max = Math.Max(1, e.FsMax0 + T(e.kFsMax));
+            var dg = d.Weapon.Dg;
+            if (dg != null && dg.kFsFury >= 0 && T(dg.kFsFury) > 0) demand += DgFuryRate() * max;
+            if (T(e.kFsPick) > 0) return demand;
             double auto = 0;
             foreach (var f in e.FsGen) auto += FeederRate(f);
             double tau = 0.25 + e.FsLife / Pct(T(e.kFsFall)) + (T(e.kFsReturn) > 0 ? 0 : e.FsWalk);

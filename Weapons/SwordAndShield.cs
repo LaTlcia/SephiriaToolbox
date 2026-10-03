@@ -256,7 +256,8 @@ public partial class SephiriaToolbox
             {
                 Mode = 0, Base = play.Special, Measured = play.SpecialMeasured, Cost0 = ss.sweepMpCost, PoolPeriod = poolPeriod,
                 kCostRed = K("SWEEPCOSTREDUCTION"), kSpecCostRed = K("SPECIALATTACKCOSTREDUCTION"), kRegen = K("MPREGEN"),
-                kResonance = K("MPRESONANCE"), kSteal = K("MPSTEAL"), Dps = SweepDps(avatar), Reserved = avatar.reservedMp
+                kResonance = K("MPRESONANCE"), kSteal = K("MPSTEAL"), Dps = SweepDps(avatar), Reserved = avatar.reservedMp,
+                GuardRed = SweepBuffReduction(ss.buffPrefab), PerfectRed = SweepBuffReduction(ss.perfectGuardBuffPrefab)
             };
         if (play.SpecialByMp)
             m.Notes.Add(play.SpecialMeasured
@@ -267,6 +268,11 @@ public partial class SephiriaToolbox
     void WeaponGuardBuffs(PlayerAvatar avatar, ArrModel m, DpsModel d, Func<string, int> K, WeaponSimple weapon, Behavior play, Dictionary<int, double> curRaw)
     {
         var live = avatar.GetComponent<WeaponControllerSimple>()?.currentWeapon;
+        if (live is WeaponSimple_SwordAndShield liveSs)
+        {
+            double now = ActiveSweepBuff(avatar, liveSs.buffPrefab) + ActiveSweepBuff(avatar, liveSs.perfectGuardBuffPrefab);
+            if (now != 0) curRaw[K("SWEEPCOSTREDUCTION")] = curRaw.GetValueOrDefault(K("SWEEPCOSTREDUCTION")) + now;
+        }
         if (live != null && live.addons != null && BuffsField?.GetValue(avatar) is Dictionary<string, CharacterBuff> buffs)
             foreach (var pg in live.addons.OfType<WeaponAddon_PerfectGuardBuff>())
                 if (pg?.buffPrefab != null && !string.IsNullOrEmpty(pg.buffPrefab.ID) && buffs.TryGetValue(pg.buffPrefab.ID, out var active) && active != null)
@@ -354,7 +360,7 @@ public partial class SephiriaToolbox
         {
             var ss = d.Weapon.Ss;
             if (ss == null || ss.Mode != 2 || ss.StrikeRate <= 0) return 1;
-            double swing = Math.Max(0.05, ss.SwingBase * WeaponAs());
+            double swing = Math.Max(0.05, ss.SwingBase * SwingAs());
             double stacks = SsHaetaeStacks(), ratio = stacks >= ss.ExplHiStack ? ss.ExplRatioHi : ss.ExplRatio;
             double perStrike = ss.StrikeMult + ss.ExplMult * ratio / 100.0 * stacks;
             return 1 + ss.StrikeRate * perStrike / (swing * ss.ComboMult);

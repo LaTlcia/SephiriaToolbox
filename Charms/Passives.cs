@@ -5,7 +5,7 @@ using UnityEngine;
 
 public partial class SephiriaToolbox
 {
-    enum PKind : byte { Stat, Amp, PerStat, Mul, Crit, CritDmg, PerDebuffStack }
+    enum PKind : byte { Stat, Amp, PerStat, Mul, Crit, CritDmg, PerDebuffStack, PerTablet }
 
     sealed class PassiveDef
     {
@@ -26,6 +26,7 @@ public partial class SephiriaToolbox
         public int Elem = -1;
         public string ElemField;
         public bool Direct;
+        public bool OwnOnly;
         public int DebuffUp = -1;
         public bool PerDebuffCount;
     }
@@ -41,7 +42,7 @@ public partial class SephiriaToolbox
     {
         if (buildCloseCdf != null && range > 0) return Math.Max(0.02, CloseShare(buildCloseCdf, wide ? range * 2 : range));
         var w = buildWeapon;
-        bool ranged = w != null && w.weaponType is EWeaponType.Crossbow or EWeaponType.StaffMagic or EWeaponType.Golem;
+        bool ranged = RangedWeapon(w);
         return wide ? (ranged ? 0.5 : 0.9) : (ranged ? 0.25 : 0.6);
     }
 
@@ -49,6 +50,8 @@ public partial class SephiriaToolbox
     static double buildHitRate = -1;
     static double buildWeaponHits = 2;
     static double buildGuardHold = 0.1;
+    static double buildDash = PlayDash;
+    static double buildReloadCycle;
     static double buildDashAttack = 0.3;
     static WeaponSimple buildWeapon;
 
@@ -104,6 +107,13 @@ public partial class SephiriaToolbox
                         if (on) curRaw[k] = curRaw.GetValueOrDefault(k) + (p.Cur != null ? Num(c, p.Cur) : 0);
                         break;
                     }
+                    case PKind.PerTablet:
+                    {
+                        int k = key(p.Key);
+                        adds.Add(new StatAdd { Key = k, Mode = 6, Values = v.Select(x => (int)Math.Round(x)).ToArray() });
+                        if (on) curRaw[k] = curRaw.GetValueOrDefault(k) + (p.Cur != null ? Num(c, p.Cur) : 0);
+                        break;
+                    }
                     case PKind.PerStat:
                     {
                         int k = key(p.Key);
@@ -123,7 +133,7 @@ public partial class SephiriaToolbox
                         mods.Add(new Mod
                         {
                             Item = item, Kind = (byte)(p.Kind == PKind.Mul ? 0 : p.Kind == PKind.Crit ? 1 : 2),
-                            Elem = elem, Direct = p.Direct, Values = v, DebuffUp = p.DebuffUp, PerDebuffCount = p.PerDebuffCount,
+                            Elem = elem, Direct = p.Direct, OwnOnly = p.OwnOnly, Values = v, DebuffUp = p.DebuffUp, PerDebuffCount = p.PerDebuffCount,
                             WideMul = c is Charm_TooCloseDamage ? CloseUptime(avatar, Num(c, "range"), wide: true) / Math.Max(0.01, CloseUptime(avatar, Num(c, "range"))) : 1
                         });
                         break;

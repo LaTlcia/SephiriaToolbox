@@ -53,6 +53,7 @@ public partial class SephiriaToolbox
         ["StatusInstance_MaxMP"] = MaxMpKey,
         ["StatusInstance_FlameGround_Duration"] = GroundDurKey,
         ["StatusInstance_FlameGround_Range"] = GroundRangeKey,
+        ["StatusInstance_MoveSpeed"] = MoveSpeedKey,
     };
 
     static bool MapStatus(string statusID, out string key, out byte mode)

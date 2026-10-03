@@ -26,9 +26,13 @@ public partial class SephiriaToolbox
 
         CharmMechs["Charm_FireBulletOnHit"] = new() { Trig = Trig.Damaged, Cap = 2f, CountBy = "countByLevel", Note = Tr("trigger.fires_when_you_are") };
 
+        static double ReloadBuffUptime(Charm_Basic c) =>
+            Num(c, "hasReloadBuff") <= 0 ? 0 : buildReloadCycle > 0 ? Math.Min(1, Math.Max(0.1, Num(c, "reloadBuffDuration")) / buildReloadCycle) : UpReload;
         PassiveDefs["Charm_GrowthCrossbow"] = P(
-            new PassiveDef { Kind = PKind.Stat, Key = "BASICATTACKDAMAGEBONUS", By = "basicAttackDamageByLevel", Uptime = UpReload, Cur = "addedBasicDamage", Factor = (c, a) => Num(c, "hasReloadBuff") },
-            new PassiveDef { Kind = PKind.Stat, Key = "SPECIALATTACKDAMAGEBONUS", By = "specialAttackDamageByLevel", Uptime = UpReload, Cur = "addedSpecialDamage", Factor = (c, a) => Num(c, "hasReloadBuff") });
+            new PassiveDef { Kind = PKind.Stat, Key = "BASICATTACKDAMAGEBONUS", By = "basicAttackDamageByLevel", Cur = "addedBasicDamage", Factor = (c, a) => ReloadBuffUptime(c) },
+            new PassiveDef { Kind = PKind.Stat, Key = "SPECIALATTACKDAMAGEBONUS", By = "specialAttackDamageByLevel", Cur = "addedSpecialDamage", Factor = (c, a) => ReloadBuffUptime(c) });
+
+        PassiveDefs["Charm_GrowthGuard"] = P(new PassiveDef { Kind = PKind.Stat, Key = "GUARDRESIST", By = "guardCostReductionByLevel", Cur = "appliedGuardCost" });
 
         CharmMechs["Charm_GrowthParry"] = new() { Trig = Trig.Parry, Note = Tr("trigger.fires_sword_soul_parry") };
         Extra<Charm_GrowthParry>((s, c, b, key, levels, baseRate, swingHits) =>
@@ -37,7 +41,8 @@ public partial class SephiriaToolbox
             if (!gp.hasExtraTriggers) return;
             double finalRate = b.ComboLength > 0 ? b.Swing / b.ComboLength : 0;
             double cd = gp.extraTriggerCooldownTimer != null && gp.extraTriggerCooldownTimer.time > 0 ? gp.extraTriggerCooldownTimer.time : 0.32;
-            double furyRate = b.Weapon == EWeaponType.Dagger ? Math.Min(b.Special * b.HitsPerSwing, 1 / cd) : 0;
+            double fury = b.FuryMeasured >= 0 ? b.FuryMeasured : b.Parry;
+            double furyRate = b.Weapon == EWeaponType.Dagger ? Math.Min(fury * b.HitsPerSwing, 1 / cd) : 0;
             AddX(s, new XMod { Kind = XKind.ExtraTriggers, A = finalRate / baseRate, B = furyRate / baseRate });
             s.Note = Tr("trigger.fires_sword_soul_parries");
         });
@@ -52,12 +57,11 @@ public partial class SephiriaToolbox
 
         PassiveDefs["Charm_IncreaseLastAttackDamage_SwordAndShield"] = P(new PassiveDef { Kind = PKind.Stat, Key = FinalDmgKey, By = "damagePercentByLevel", CurFunc = (c, a) => 0 });
 
-        PassiveDefs["Charm_KatanaEnhancedDashAttackActivator"] = P(new PassiveDef
-        {
-            Kind = PKind.Stat, Key = DashDmgKey, By = "damagePercentByLevel", CurFunc = (c, a) => 0,
-            Factor = (c, a) => buildWeapon is WeaponSimple_Katana
-                ? Math.Min(1, 1 / (Math.Max(0.1, TimerSeconds(c, "enhancedAttackTimer")) * Math.Max(0.05, buildDashAttack))) : 0
-        });
+        static double EnhancedDashShare(Charm_Basic c) => buildWeapon is WeaponSimple_Katana
+            ? Math.Min(1, 1 / (Math.Max(0.1, TimerSeconds(c, "enhancedAttackTimer")) * Math.Max(0.05, buildDashAttack))) : 0;
+        PassiveDefs["Charm_KatanaEnhancedDashAttackActivator"] = P(
+            new PassiveDef { Kind = PKind.Stat, Key = DashDmgKey, By = "damagePercentByLevel", CurFunc = (c, a) => 0, Factor = (c, a) => EnhancedDashShare(c) },
+            new PassiveDef { Kind = PKind.Stat, Key = EnhDashKey, Const = 100, CurFunc = (c, a) => 0, Factor = (c, a) => EnhancedDashShare(c) });
 
         PassiveDefs["Charm_SweepRange"] = P(new PassiveDef { Kind = PKind.Stat, Key = "SPECIALATTACKDAMAGEBONUS", By = "sweepDamageByLevel", Cur = "damageAdded" });
     }

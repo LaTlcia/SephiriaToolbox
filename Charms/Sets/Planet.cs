@@ -19,13 +19,20 @@ public partial class SephiriaToolbox
             var gb = bat.greenbatPrefab != null ? bat.greenbatPrefab.GetComponent<GreenBat>() : null;
             double interval = gb != null && gb.fireIntervalTimer != null && gb.fireIntervalTimer.time > 0 ? gb.fireIntervalTimer.time : 0.5;
             int count = gb != null ? Math.Max(1, gb.fireCount) : 1;
-            s.TheoryK = count / interval;
+            double seq = gb != null && gb.sequenceFiringTimer != null ? Math.Max(0, gb.sequenceFiringTimer.time) : 0.2;
+            if (gb != null && gb.enableRandomSequenceFiringTimer) seq *= 0.6;
+            double volley = count * seq;
+            s.TheoryK = count / (interval + volley);
             s.HasTheory = true;
             s.SwingBased = false;
             s.StatRate = RateStat.None;
-            s.Note = Tr("trigger.fires_shot_every_s", interval, count);
+            s.Note = Tr("trigger.fires_shot_every_s", interval + volley, count);
             var w = b.AttackWeight;
-            AddX(s, new XMod { Kind = XKind.Planet, Key = key("PLANETATTACKSPEED"), Key2 = key(nameof(ECustomStat.SUPERPLANET).ToUpperInvariant()), A = interval, B = b.Swing * w * 0.95, C = b.DashAttack * w });
+            AddX(s, new XMod
+            {
+                Kind = XKind.Planet, Key = key("PLANETATTACKSPEED"), Key2 = key(nameof(ECustomStat.SUPERPLANET).ToUpperInvariant()),
+                A = interval, B = b.Swing * w * 0.95, C = (b.DashAttack + b.Special * 0.95) * w, D = volley
+            });
             AddX(s, new XMod { Kind = XKind.DmgPct, Key = key("PLANETDAMAGE") });
         });
     }

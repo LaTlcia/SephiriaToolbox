@@ -24,6 +24,7 @@ public partial class SephiriaToolbox
         readonly double[] raw, amp;
         readonly double[] elem = new double[4], elem0 = new double[4], stat = new double[4], bonus = new double[4], selPct = new double[4];
         readonly double[] modMul = new double[6], modCrit = new double[6], modCritDmg = new double[6];
+        double modOwn = 1;
         double boltFactor = 1;
         readonly int[] sel = new int[4];
         double highest;
@@ -33,7 +34,7 @@ public partial class SephiriaToolbox
         readonly int[][] wpCats;
         readonly int[] wpCatN;
         readonly double[] extraCdr, autoRate, boost, magicRate, costRed;
-        readonly double[] manualRate, boltRate;
+        readonly double[] manualRate, boltRate, dupRate;
         readonly bool[] boltSet;
         readonly bool[] enhanced;
         readonly bool[] arrFast, arrWide;
@@ -62,7 +63,7 @@ public partial class SephiriaToolbox
                 wpCats = new int[n][]; wpCatN = new int[n];
                 foreach (var sp in d.Specials) if (sp.Kind == SpecialKind.WhitePaper) wpCats[sp.Item] = new int[8];
                 extraCdr = new double[n]; autoRate = new double[n]; boost = new double[n]; magicRate = new double[n]; costRed = new double[n];
-                manualRate = new double[n]; boltRate = new double[n]; boltSet = new bool[n];
+                manualRate = new double[n]; boltRate = new double[n]; boltSet = new bool[n]; dupRate = new double[n];
                 enhanced = new bool[n];
                 arrFast = new bool[n]; arrWide = new bool[n];
             }
@@ -254,6 +255,13 @@ public partial class SephiriaToolbox
             }
         }
 
+        int TabletsInBag()
+        {
+            int n = 0;
+            foreach (int t in m.TabletItem) if (t >= 0 && t < ItemSlot.Length && ItemSlot[t] >= 0) n++;
+            return n;
+        }
+
         void Stats()
         {
             Array.Copy(d.BaseRaw, raw, raw.Length);
@@ -268,6 +276,7 @@ public partial class SephiriaToolbox
                 {
                     if (a.Mode is 3 or 5) continue;
                     int v = a.Values[Math.Min(idx, a.Values.Length - 1)];
+                    if (a.Mode == 6) { raw[a.Key] += v * TabletsInBag(); continue; }
                     if (a.Mode == 0) raw[a.Key] += v;
                     else if (a.Mode == 1) amp[a.Key] += v;
                     else highest += v;
@@ -285,10 +294,12 @@ public partial class SephiriaToolbox
                         raw[a.Key] += SafeAt(a.Values, idx) * Math.Floor(Math.Max(0, T(a.Src)) / SafeAt(a.Div, idx));
             }
             UpdateMagicRates();
+            MagicBuffStats();
             specialScale = SpecialScaleNow();
             DebuffState();
             DebuffLinkedStats();
             for (int i = 0; i < 6; i++) modMul[i] = 1;
+            modOwn = 1;
             Array.Clear(modCrit, 0, 6); Array.Clear(modCritDmg, 0, 6);
             boltFactor = 1;
             foreach (var md in d.Mods)
@@ -304,10 +315,15 @@ public partial class SephiriaToolbox
                     v *= 1 - (1 - own) * (1 - other);
                 }
                 if (md.PerDebuffCount) v *= ownDebuffObjects + d.OtherDebuffObjects;
-                if (md.Kind == 0) modMul[scope] *= Math.Max(0, 1 + v / 100.0);
+                if (md.Kind == 0 && md.OwnOnly && scope == 0) modOwn *= Math.Max(0, 1 + v / 100.0);
+                else if (md.Kind == 0) modMul[scope] *= Math.Max(0, 1 + v / 100.0);
                 else if (md.Kind == 1) modCrit[scope] += v;
                 else if (md.Kind == 2) modCritDmg[scope] += v;
-                else boltFactor *= Math.Max(0, v);
+                else
+                {
+                    double side = !Single || (d.kBoltHoming >= 0 && T(d.kBoltHoming) > 0) ? 1 : d.BoltSideShare;
+                    boltFactor *= Math.Max(0, v) * (1 + 2 * side);
+                }
             }
             ApplyCondDamage();
             ElemPass(false, elem0);

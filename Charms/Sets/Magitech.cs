@@ -5,6 +5,8 @@ using UnityEngine;
 
 public partial class SephiriaToolbox
 {
+    const double ChakramRehitSeconds = 0.24;
+
     static void RegisterMagitech()
     {
         CharmMechs["Charm_ElectricEarring"] = new() { Trig = Trig.Periodic, TimerField = "cooldownTimer", ExtraField = "searchTimer", TimerExtra = 0.5f, CountBy = "countByLevel", Note = Tr("trigger.when_off_cooldown_finds_enemies") };
@@ -16,10 +18,14 @@ public partial class SephiriaToolbox
             AddX(s, new XMod { Kind = XKind.Sweep, Key = key("ELECTRICEARRINGSWEEP"), A = Math.Max(0.1, TimerSeconds(c, "cooldownTimer")), B = search > 0 ? search : 0.5, C = b.Special });
         });
 
-        CharmMechs["Charm_FireChakram"] = new() { Trig = Trig.Orbit, Base = 0.83f, CountBy = "bulletCountByLevel", Note = Tr("trigger.orbiting_chakrams") };
+        CharmMechs["Charm_FireChakram"] = new() { Trig = Trig.Orbit, Base = 1f, CountBy = "bulletCountByLevel", Note = Tr("trigger.orbiting_chakrams") };
         Extra<Charm_FireChakram>((s, c, b, key, levels, baseRate, swingHits) =>
         {
-            AddX(s, new XMod { Kind = XKind.RatePctIf, Key = key("ATKSPDCHAKRAM"), Key2 = key("ATTACKSPEED") });
+            var ch = (Charm_FireChakram)c;
+            double passes = Math.Max(0.05, ch.angleSpeed / 360.0);
+            double touching = Math.Min(1, (ch.charkramAttackRadius + 0.5) / (Math.PI * 1.5)) / ChakramRehitSeconds;
+            s.TheoryK *= Math.Max(passes, touching);
+            AddX(s, new XMod { Kind = XKind.SpinFloor, Key = key("ATKSPDCHAKRAM"), A = passes, B = touching });
         });
 
         PassiveDefs["Charm_FireFly"] = P(new PassiveDef

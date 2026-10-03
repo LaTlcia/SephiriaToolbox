@@ -38,11 +38,14 @@ public partial class SephiriaToolbox
         d.kGoldHand = K("GOLDHAND"); d.kGoldHandUnl = K("GOLDHANDUNLIMIT"); d.kDefToAtk = K("DEFENSETOATTACK"); d.kDef = K("DAMAGEREDUCTION");
         d.kDebuff = K("DEBUFFDAMAGE"); d.kPoison = K("POISONDEBUFFDAMAGEBONUS");
         d.kFollowerDmg = K("FOLLOWERDAMAGE"); d.kFollowerCrit = K("FOLLOWERCRITICAL"); d.kFollowerCritContrib = K("FOLLOWERCRITICALCONTRIBUTE");
-        d.kBlockMagic = K("BLOCKCASTMAGIC");
+        d.kBlockMagic = K("BLOCKCASTMAGIC"); d.kEvCd = K("EVASIONCOOLDOWN"); d.kBoltHoming = K("BOLTMAGICHOMING");
         d.kMpSkill = K("MPSKILLDAMAGE"); d.kMagicMp = K("MAGICMP"); d.kTrue = K("TRUEDAMAGE"); d.kIgnoreDef = K("IGNOREDEFENSE");
         d.kFsIgnore = K("FLAMESWORDIGNOREDEFENSE"); d.kFixedAs = K("FIXEDATTACKSPEED"); d.kSpecAs = K("SPECIALATTACKSPEED");
         d.kUnlimited = K("UNLIMITEDCOMBO"); d.kAdvNego = K("ADVANCED_NEGOTIATION"); d.kNego = K("NEGOTIATION"); d.kFollowerAs2 = K("FOLLOWERATTACKSPEED");
         d.kMaxMp = K(MaxMpKey); d.kFinalMp = K("FINALMP");
+        d.MpGain = MpGain(avatar);
+        try { if (avatar.NetworkcurrentCostumeEquipEffect is CostumeEquipEffect_Skeleton sk && sk.addDamage != 0) { d.ConstMul = 1 + sk.addDamage / 100.0; m.Notes.Add(Tr("model.costume_all_damage", sk.addDamage)); } }
+        catch (Exception e) { WarnOnce("服装效果", e); }
         d.ExtraBase[d.kMaxMp] = avatar.maxMp;
         try { d.DefaultMp = KeywordDatabase.GetConstValue("PLAYERDEFAULTMP"); } catch { }
         try
@@ -91,7 +94,9 @@ public partial class SephiriaToolbox
         buildCloseCdf = play.Single ? BossCloseCdf() : null;
         buildHitRate = play.Single ? BossHitRate() : -1;
         buildGuardHold = GuardHoldUptime();
-        buildDashAttack = play.DashAttack;
+        bool dashMeasured = DashMeasured(out var dashRate);
+        buildDash = d.Dash = dashRate;
+        if (dashMeasured) m.Notes.Add(Tr("model.dash_live", dashRate));
         if (play.Single)
         {
             d.FightLen = BossFightLength(out d.FightCount);
@@ -101,12 +106,14 @@ public partial class SephiriaToolbox
         }
         double bossOthers = play.Single ? BossOtherDebuffObjects() : -1;
         d.OtherDebuffObjects = bossOthers >= 0 ? bossOthers : OtherDebuffsOnTarget();
+        buildReloadCycle = 0;
         if (weapon is WeaponSimple_SwordAndShield ss) BuildSweep(avatar, d, K, ss, play, m);
         else if (weapon is WeaponSimple_GreatSword gsw) BuildGreatSwordSweep(avatar, d, K, gsw, play, m);
         else if (weapon is WeaponSimple_Crossbow xbw) BuildCrossbowModel(avatar, d, K, xbw, play, m);
         else if (weapon is WeaponSimple_Katana ktw) BuildKatanaSweep(avatar, d, K, ktw, play, m);
         else if (weapon is WeaponSimple_QuartterStaff qsw) BuildQuarterStaffModel(avatar, d, K, qsw, play, m);
-        buildWeaponHits = Math.Max(0.2, play.Swing * play.SwingHit * AttackSpeedFactor(avatar.GetCustomStat(ECustomStat.AttackSpeed), weapon != null ? WeaponAsAmp(weapon) : 0)
+        buildDashAttack = play.DashAttack;
+        buildWeaponHits = Math.Max(0.2, play.Swing * play.SwingHit * SwingSpeedNow(avatar, weapon)
                                         + play.Special + play.DashAttack + play.Strike);
         bool guards = weapon is WeaponSimple_SwordAndShield or WeaponSimple_QuartterStaff;
         d.GuardRate = guards ? play.Guard : 0;
@@ -128,7 +135,7 @@ public partial class SephiriaToolbox
             if (tal.Count > 0) m.Notes.Add(Tr("model.talents_already_included_through", string.Join(Tr("common.sep_comma"), tal.Select(t => $"{t.name} {t.level}"))));
         }
         catch (Exception e) { WarnOnce("天赋", e); }
-        d.kEvasion = K("EVASION");
+        d.kEvasion = K("EVASION"); d.kDashEvasion = K("DASHEVASION");
         d.kNoMagicCost = K("NOMAGICCOST");
         d.kMagicCostReduce = K("MAGICCOSTREDUCE");
         {
@@ -140,7 +147,8 @@ public partial class SephiriaToolbox
         }
         if (weaponOverride != null) m.Notes.Add(Tr("model.enhance_preview_weapon_treated", (WeaponDatabase.FindWeaponById(weaponOverride.entityId) != null ? WeaponName(weaponOverride.entityId) : Tr("model.new_weapon"))));
         try { EstimateTriggers(avatar, weapon, charmOf, play); } catch (Exception e) { WarnOnce("Buff 触发频率", e); }
-        d.Melee = weapon == null || !(weapon.weaponType is EWeaponType.Crossbow or EWeaponType.StaffMagic or EWeaponType.Golem);
+        d.Melee = !RangedWeapon(weapon);
+        d.BoltSideShare = CloseUptime(avatar, 2.75, wide: true);
         d.kBuffDur = K("BUFFDURATION");
         try { BuildWeaponModel(avatar, d, K, weapon, play); } catch (Exception e) { WarnOnce("武器模型", e); }
         for (int i = 0; i < m.Items.Length; i++)
@@ -169,7 +177,7 @@ public partial class SephiriaToolbox
                 ApplyModelHooks(c, i, d);
                 if (c is Charm_BoltMagicMultiShot bm && bm.multiShotDamageRatioByLevel != null && bm.multiShotDamageRatioByLevel.Length > 0)
                 {
-                    mods.Add(new Mod { Item = i, Kind = 3, Values = Enumerable.Range(0, Math.Max(1, c.maxLevel + 1)).Select(l => 3 * SafeAt(bm.multiShotDamageRatioByLevel, l)).ToArray() });
+                    mods.Add(new Mod { Item = i, Kind = 3, Values = Enumerable.Range(0, Math.Max(1, c.maxLevel + 1)).Select(l => SafeAt(bm.multiShotDamageRatioByLevel, l)).ToArray() });
                     passiveCharms++;
                 }
             }
@@ -183,6 +191,7 @@ public partial class SephiriaToolbox
         try { BuildWeaponCondDamage(m, d, K, weapon); } catch (Exception e) { WarnOnce("武器的条件增伤", e); }
         try { WeaponSpecialBuffs(avatar, m, d, K, weapon, play, curRaw); } catch (Exception e) { WarnOnce("武器的特攻 Buff", e); }
         try { GreatSwordLiveState(avatar, K, curRaw); } catch (Exception e) { WarnOnce("大剑的临时属性", e); }
+        try { KatanaLiveState(avatar, d, K, curRaw); } catch (Exception e) { WarnOnce("太刀的临时属性", e); }
         try { DaggerDashBuff(avatar, m, d, K, weapon, play, curRaw); } catch (Exception e) { WarnOnce("匕首的冲刺 Buff", e); }
         try { CrossbowLiveState(avatar, K, curRaw); } catch (Exception e) { WarnOnce("弩的霜之帷幕", e); }
 
@@ -239,11 +248,13 @@ public partial class SephiriaToolbox
                 if (d.Weapon.Ss != null && d.Weapon.Ss.Ring)
                     sp.MultiScale = Math.Max(1, Math.Min(d.Weapon.Ss.RingBase, play.EnemiesM) * 0.6) / Math.Max(1, d.Weapon.Ss.RingBase / 6.0);
             }
+            double rideDash = 0;
             if (!mv.NoDash)
             {
                 double near = buildCloseCdf != null ? CloseShare(buildCloseCdf, 3) : 0.6;
-                double auto = mv.AutoDash > 0 ? PlayDash * near : 0;
+                double auto = mv.AutoDash > 0 ? buildDash * near : 0;
                 double perSec = play.DashAttack * mv.DashMult + auto * mv.AutoDash;
+                rideDash = perSec;
                 if (perSec > 0)
                     AddWeapon(SrcKind.WeaponDash, Tr("src.weapon_dash_attack"), mv.DashFd, perSec, false, "Weapon_DashAttack",
                               auto > 0
@@ -269,18 +280,28 @@ public partial class SephiriaToolbox
                     if (sources.Any(x => x.Ids.Contains(ad.damageId))) continue;
                     string stat = ad.statId.ToString().ToUpperInvariant();
                     int e = Array.IndexOf(ElemKeys, stat);
+                    var dgm = d.Weapon.Dg;
+                    double rideSpecial = mv.NoSpecial ? 0
+                        : dgm != null ? dgm.ParrySwing * dgm.ParryMult + (dgm.CanFury ? (dgm.FuryBase >= 0 ? dgm.FuryBase : dgm.Parry) * dgm.FuryMult : 0)
+                        : play.Special * mv.SpecialMult;
                     var s = new DpsSource
                     {
                         Kind = SrcKind.Rider, Name = Tr("src.weapon", TrimPrefix(DamageIdName(ad.damageId), "武器")),
                         ElemIdx = e, StatKey = e < 0 ? K(stat) : -1,
                         AddKey = K("ADDITIONALELEMENTALDAMAGEBONUS"), AddBase = ad.additionalDamagePercent,
-                        Prior = play.Swing, TheoryK = (play.Swing * play.SwingHit + play.Special + play.DashAttack + play.Strike) * play.HitsPerSwing, HasTheory = true, Note = Tr("model.added_every_weapon_hit"),
+                        SwingScaled = true, RideBasicAsDash = mv.BasicIsDash,
+                        RideBasic = (play.Swing * play.SwingHit + play.Strike) * mv.BasicMult * play.HitsPerSwing,
+                        RideSpecial = rideSpecial * play.HitsPerSwing, RideDash = rideDash * play.HitsPerSwing,
+                        EclipseAdd = HasAddon<WeaponAddonKatana_FlameSword_Eclipse>(weapon) ? ConstOr("katanaEclipseElementalDamageBonusPercent", 70) : 0,
+                        Prior = 1, TheoryK = 1, HasTheory = true, Note = Tr("model.added_every_weapon_hit"),
                         DmgElem = ElemIndex(ad.elementalType), MultiScale = play.HitsPerSwingM / Math.Max(1e-6, play.HitsPerSwing)
                     };
                     s.Ids.Add(ad.damageId);
                     sources.Add(s);
                 }
             try { AddBurnRingSource(d, K, weapon, play, sources); } catch (Exception e) { WarnOnce("武器的火焰之环", e); }
+            try { AddStaffSoldierSource(avatar, d, weapon, play, sources); } catch (Exception e) { WarnOnce("神圣之壶的士兵", e); }
+            try { AddKatanaSources(avatar, d, K, weapon, sources); } catch (Exception e) { WarnOnce("太刀的魔力刀 / 纳斯特朗", e); }
         }
         var extra = new ItemExtra[m.Items.Length];
         var srcOfItem = Enumerable.Repeat(-1, m.Items.Length).ToArray();
@@ -309,6 +330,12 @@ public partial class SephiriaToolbox
                         EMagicClass.Air => 3,
                         _ => 0
                     };
+                    if (skill is ActiveSkill_Buff buffSkill)
+                    {
+                        try { if (ReadMagicBuff(cm, buffSkill, i, avatar, charmOf, d, K, curRaw, curAmp)) passiveCharms++; }
+                        catch (Exception e) { WarnOnce("增益魔法 " + m.Items[i].Name, e); }
+                        continue;
+                    }
                     if (skill == null || !skill.IsAttackMagic()) continue;
                     var s = new DpsSource
                     {
@@ -321,17 +348,7 @@ public partial class SephiriaToolbox
                         Note = Tr("model.cooldown_s", entity.cooldownTime)
                     };
                     if (!ApplyMagicMech(s, skill, play, Math.Max(1, c.maxLevel + 1), 1)) s.HasTheory = false;
-                    try { s.MagicCost = Enumerable.Range(0, Math.Max(1, c.maxLevel + 1)).Select(l => (float)cm.GetCost(avatar, l)).ToArray(); } catch { }
-                    try
-                    {
-                        s.MagicCostBase = cm.ContainedMagic?.mpCostsByLevel?.Select(v => (float)v).ToArray();
-                        int add = cm.AdditionalCost;
-                        foreach (var other in charmOf)
-                            if (other is Charm_ReduceMPCost rc && ReferenceEquals(FieldValue(rc, "currentMagicCharm"), cm) && Num(rc, "reduceActivated") > 0)
-                                add += (int)Num(rc, "reducedPercent");
-                        s.MagicCostAdd = add;
-                    }
-                    catch { s.MagicCostBase = null; }
+                    ReadMagicCost(cm, avatar, charmOf, out s.MagicCost, out s.MagicCostBase, out s.MagicCostAdd);
                     s.DmgElem = extra[i].MagicElem;
                     if (!string.IsNullOrEmpty(s.RelKey) && !index.ContainsKey(s.RelKey)) s.RelKey = null;
                     foreach (var comp in entity.magicPrefab.GetComponentsInChildren<Component>(true)) CollectIds(comp, s.Ids);
